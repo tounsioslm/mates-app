@@ -64,14 +64,6 @@ Inspirée du modèle de Playtomic, mais ouverte à **tous les sports collectifs 
 
 ---
 
-## 📊 Section Analyse Informatique & Modélisation UML (UE04 HELMo)
-
-Accessible directement via l'onglet **📊 Analyse & UML** (`#uml`) :
-- **Diagramme de Cas d'Utilisation UML** interactif au format standard (Acteur primaire `Joueur` à gauche, Acteurs secondaires `Système de paiement` et `Système de géolocalisation` à droite, relations `<<include>>` et `<<extend>>`).
-- **Fiches textuelles de cas d'utilisation** rédigées selon le formalisme enseigné par M. Christophe Thomas (Nom avec verbe à l'infinitif, Événement déclencheur, Description, Acteurs, Préconditions, Postconditions, Garanties).
-
----
-
 ## 🚀 Déploiement sur Render
 
 Consulte le fichier [DEPLOY_RENDER.md](file:///c:/Users/leila/Documents/Mates/DEPLOY_RENDER.md) pour héberger le site gratuitement en 3 minutes sur **Render**.

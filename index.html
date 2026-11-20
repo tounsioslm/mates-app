@@ -75,9 +75,6 @@
         <a href="#matches" id="nav-matches" class="nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300">
           Matchs ouverts
         </a>
-        <a href="#uml" id="nav-uml" class="nav-link px-4 py-2 rounded-full text-xs font-semibold transition-all hover:text-mates-green text-slate-400 border border-transparent hover:border-mates-green/30">
-          📊 Analyse & UML
-        </a>
       </nav>
 
       <!-- Zone utilisateur & CTA Connexion -->
@@ -97,7 +94,6 @@
       <a href="#mates" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Trouver un mate</a>
       <a href="#sports" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Les 14 Sports</a>
       <a href="#matches" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Matchs ouverts</a>
-      <a href="#uml" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium text-mates-green hover:bg-mates-cardElevated">Dossier Analyse & UML</a>
       <a href="#auth" class="mobile-nav-link block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center mt-3">Connexion / Inscription</a>
     </div>
   </header>
@@ -857,243 +853,6 @@
       </div>
     </section>
 
-    <!-- ------------------------------------------------------------------
-         SECTION BONUS : DOSSIER ANALYSE & UML (UE04 HELMo Christophe Thomas)
-         ------------------------------------------------------------------ -->
-    <section id="view-uml" class="page-view hidden fade-in py-10">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-        
-        <div class="border-b border-mates-border pb-6">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase tracking-wider mb-2">
-            UE04 – Analyse Informatique • HELMo
-          </div>
-          <h1 class="text-3xl sm:text-4xl font-extrabold text-white">Dossier d'analyse UML du projet Mates</h1>
-          <p class="text-slate-300 mt-2 text-sm max-w-3xl">
-            Modélisation formelle du système Mates selon la méthodologie du cours : frontière du système, identification rigoureuse des acteurs primaires et secondaires, relations &laquo;include&raquo;, &laquo;extend&raquo; et fiches textuelles de cas d'utilisation.
-          </p>
-        </div>
-
-        <!-- DIAGRAMME UML INTERACTIF -->
-        <div class="bg-mates-card border border-mates-border rounded-3xl p-6 sm:p-8 space-y-6">
-          <div class="flex items-center justify-between border-b border-mates-border pb-4">
-            <div>
-              <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                <i data-lucide="git-merge" class="w-5 h-5 text-mates-green"></i>
-                <span>Diagramme de Cas d'Utilisation UML</span>
-              </h2>
-              <p class="text-xs text-slate-400 mt-0.5">Conforme aux 6 étapes de la méthode et aux règles de validation (pas de flèches d'ordre, acteurs à l'extérieur, verbes à l'infinitif).</p>
-            </div>
-            <span class="text-xs font-mono px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">UML 2.5 Standard</span>
-          </div>
-
-          <!-- Rendu visuel du diagramme SVG -->
-          <div class="w-full overflow-x-auto bg-[#0a0f18] p-6 rounded-2xl border border-mates-border flex justify-center">
-            <svg class="w-full max-w-4xl h-auto" viewBox="0 0 920 620" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <!-- Flèche pointillée include -->
-                <marker id="arrow-include" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                  <path d="M 0 1 L 8 5 L 0 9" fill="none" stroke="#C0FB18" stroke-width="1.5" />
-                </marker>
-                <!-- Flèche triangle généralisation -->
-                <marker id="arrow-gen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-                  <polygon points="0 1, 9 5, 0 9" fill="#0B0F19" stroke="#94A3B8" stroke-width="1.5" />
-                </marker>
-              </defs>
-
-              <!-- RECTANGLE SYSTÈME : MATES -->
-              <rect x="220" y="30" width="480" height="560" rx="16" fill="#131A29" stroke="#23304A" stroke-width="2" />
-              <text x="460" y="65" text-anchor="middle" fill="#FFFFFF" font-family="'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="18">Système Mates</text>
-
-              <!-- ACTEURS GAUCHE (PRIMAIRES) -->
-              <!-- Joueur -->
-              <g transform="translate(70, 240)">
-                <!-- Stickman Joueur -->
-                <circle cx="40" cy="20" r="14" fill="#1B2438" stroke="#C0FB18" stroke-width="2.5" />
-                <line x1="40" y1="34" x2="40" y2="75" stroke="#C0FB18" stroke-width="2.5" />
-                <line x1="15" y1="50" x2="65" y2="50" stroke="#C0FB18" stroke-width="2.5" />
-                <line x1="40" y1="75" x2="20" y2="110" stroke="#C0FB18" stroke-width="2.5" />
-                <line x1="40" y1="75" x2="60" y2="110" stroke="#C0FB18" stroke-width="2.5" />
-                <text x="40" y="130" text-anchor="middle" fill="#FFFFFF" font-family="sans-serif" font-weight="700" font-size="14">Joueur</text>
-                <text x="40" y="146" text-anchor="middle" fill="#94A3B8" font-size="11">(Acteur principal)</text>
-              </g>
-
-              <!-- ACTEURS DROITE (SECONDAIRES / LOGICIELS EXTERNES) -->
-              <!-- Service de paiement -->
-              <g transform="translate(740, 160)">
-                <rect x="0" y="0" width="140" height="54" rx="8" fill="#1B2438" stroke="#3B82F6" stroke-width="2" />
-                <text x="70" y="22" text-anchor="middle" fill="#94A3B8" font-size="11">&laquo;système&raquo;</text>
-                <text x="70" y="40" text-anchor="middle" fill="#FFFFFF" font-weight="700" font-size="12">Paiement</text>
-              </g>
-
-              <!-- Service de géolocalisation -->
-              <g transform="translate(740, 360)">
-                <rect x="0" y="0" width="140" height="54" rx="8" fill="#1B2438" stroke="#3B82F6" stroke-width="2" />
-                <text x="70" y="22" text-anchor="middle" fill="#94A3B8" font-size="11">&laquo;système&raquo;</text>
-                <text x="70" y="40" text-anchor="middle" fill="#FFFFFF" font-weight="700" font-size="12">Géolocalisation</text>
-              </g>
-
-              <!-- CAS D'UTILISATION (ELLIPSES) -->
-              <!-- CU 1 : Rechercher un mate -->
-              <g id="cu-search">
-                <ellipse cx="360" cy="120" rx="90" ry="26" fill="#1B2438" stroke="#C0FB18" stroke-width="1.8" />
-                <text x="360" y="125" text-anchor="middle" fill="#FFFFFF" font-weight="600" font-size="13">Rechercher un mate</text>
-              </g>
-
-              <!-- CU 2 : Réserver un terrain -->
-              <g id="cu-book">
-                <ellipse cx="360" cy="210" rx="90" ry="26" fill="#1B2438" stroke="#C0FB18" stroke-width="1.8" />
-                <text x="360" y="215" text-anchor="middle" fill="#FFFFFF" font-weight="600" font-size="13">Réserver un terrain</text>
-              </g>
-
-              <!-- CU 3 : Rejoindre un match ouvert -->
-              <g id="cu-join">
-                <ellipse cx="360" cy="300" rx="100" ry="26" fill="#1B2438" stroke="#C0FB18" stroke-width="1.8" />
-                <text x="360" y="305" text-anchor="middle" fill="#FFFFFF" font-weight="600" font-size="13">Rejoindre un match</text>
-              </g>
-
-              <!-- CU 4 : Gérer son profil -->
-              <g id="cu-profile">
-                <ellipse cx="360" cy="390" rx="90" ry="26" fill="#1B2438" stroke="#C0FB18" stroke-width="1.8" />
-                <text x="360" y="395" text-anchor="middle" fill="#FFFFFF" font-weight="600" font-size="13">Gérer son profil</text>
-              </g>
-
-              <!-- CU 5 : Consulter le catalogue des sports -->
-              <g id="cu-catalog">
-                <ellipse cx="360" cy="480" rx="105" ry="26" fill="#1B2438" stroke="#C0FB18" stroke-width="1.8" />
-                <text x="360" y="485" text-anchor="middle" fill="#FFFFFF" font-weight="600" font-size="13">Consulter les sports</text>
-              </g>
-
-              <!-- CU INCLUS : Payer la réservation <<include>> -->
-              <g id="cu-pay">
-                <ellipse cx="570" cy="180" rx="85" ry="25" fill="#1A2A1A" stroke="#C0FB18" stroke-width="1.8" />
-                <text x="570" y="185" text-anchor="middle" fill="#C0FB18" font-weight="600" font-size="12">Payer la réservation</text>
-              </g>
-
-              <!-- CU ÉTENDU : Louer du matériel <<extend>> -->
-              <g id="cu-rent">
-                <ellipse cx="570" cy="270" rx="85" ry="25" fill="#252418" stroke="#EAB308" stroke-width="1.8" />
-                <text x="570" y="275" text-anchor="middle" fill="#EAB308" font-weight="600" font-size="12">Louer des raquettes</text>
-              </g>
-
-              <!-- CU ÉTENDU : Activer localisation GPS <<extend>> -->
-              <g id="cu-gps">
-                <ellipse cx="570" cy="390" rx="85" ry="25" fill="#162238" stroke="#38BDF8" stroke-width="1.8" />
-                <text x="570" y="395" text-anchor="middle" fill="#38BDF8" font-weight="600" font-size="12">Détecter via GPS</text>
-              </g>
-
-              <!-- ASSOCIATIONS (Traits pleins Joueur -> CU) -->
-              <line x1="135" y1="280" x2="270" y2="120" stroke="#94A3B8" stroke-width="1.8" />
-              <line x1="135" y1="290" x2="270" y2="210" stroke="#94A3B8" stroke-width="1.8" />
-              <line x1="135" y1="300" x2="260" y2="300" stroke="#94A3B8" stroke-width="1.8" />
-              <line x1="135" y1="310" x2="270" y2="390" stroke="#94A3B8" stroke-width="1.8" />
-              <line x1="135" y1="320" x2="260" y2="480" stroke="#94A3B8" stroke-width="1.8" />
-
-              <!-- RELATIONS INCLUDE & EXTEND -->
-              <!-- Réserver un terrain -> Payer <<include>> -->
-              <line x1="440" y1="200" x2="495" y2="188" stroke="#C0FB18" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-include)" />
-              <text x="468" y="180" fill="#C0FB18" font-size="10" font-weight="bold">&laquo;include&raquo;</text>
-
-              <!-- Louer raquettes -> Réserver un terrain <<extend>> -->
-              <line x1="500" y1="258" x2="445" y2="225" stroke="#EAB308" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-include)" />
-              <text x="480" y="252" fill="#EAB308" font-size="10" font-weight="bold">&laquo;extend&raquo;</text>
-
-              <!-- Détecter via GPS -> Gérer profil <<extend>> -->
-              <line x1="485" y1="390" x2="450" y2="390" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-include)" />
-              <text x="465" y="380" fill="#38BDF8" font-size="10" font-weight="bold">&laquo;extend&raquo;</text>
-
-              <!-- ASSOCIATIONS ACTEURS SECONDAIRES -->
-              <!-- Payer la réservation -> Système Paiement -->
-              <line x1="655" y1="180" x2="740" y2="187" stroke="#3B82F6" stroke-width="1.8" />
-
-              <!-- Détecter via GPS -> Système Géolocalisation -->
-              <line x1="655" y1="390" x2="740" y2="387" stroke="#3B82F6" stroke-width="1.8" />
-            </svg>
-          </div>
-        </div>
-
-        <!-- FICHES TEXTUELLES DE CAS D'UTILISATION (Conformes à la diapo 27 du cours de Christophe Thomas) -->
-        <div class="space-y-6">
-          <h2 class="text-2xl font-bold text-white flex items-center gap-2">
-            <i data-lucide="file-text" class="w-6 h-6 text-mates-green"></i>
-            <span>Fiches textuelles de cas d'utilisation</span>
-          </h2>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            <!-- Fiche 1 : Réserver un terrain -->
-            <div class="bg-mates-card border border-mates-border rounded-2xl p-6 space-y-4">
-              <div class="flex items-center justify-between border-b border-mates-border pb-3">
-                <span class="text-xs font-bold text-mates-green uppercase">Cas d'utilisation 01</span>
-                <span class="text-xs font-mono text-slate-400">CU-01</span>
-              </div>
-              <h3 class="text-lg font-bold text-white">Réserver un terrain</h3>
-              
-              <div class="text-xs space-y-3 text-slate-300">
-                <div>
-                  <strong class="text-white block mb-0.5">Événement déclencheur :</strong>
-                  Le joueur souhaite planifier un match avec ses mates et bloquer un créneau dans un club.
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Description de la fonctionnalité :</strong>
-                  Le joueur sélectionne un sport, consulte la disponibilité des terrains des clubs partenaires à la date et heure voulues, choisit son créneau puis procède au règlement en ligne.
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Acteur(s) impliqué(s) :</strong>
-                  Joueur (primaire), Système de paiement (secondaire).
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Préconditions :</strong>
-                  Le joueur dispose d'un profil actif et le club a des créneaux libres.
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Postconditions :</strong>
-                  Le créneau est verrouillé, une notification de confirmation est transmise et le reçu est archivé.
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Relations :</strong>
-                  Inclut obligatoirement &laquo;Payer la réservation&raquo; et peut être étendu par &laquo;Louer des raquettes&raquo; si le joueur n'a pas son matériel.
-                </div>
-              </div>
-            </div>
-
-            <!-- Fiche 2 : Rechercher un mate -->
-            <div class="bg-mates-card border border-mates-border rounded-2xl p-6 space-y-4">
-              <div class="flex items-center justify-between border-b border-mates-border pb-3">
-                <span class="text-xs font-bold text-mates-green uppercase">Cas d'utilisation 02</span>
-                <span class="text-xs font-mono text-slate-400">CU-02</span>
-              </div>
-              <h3 class="text-lg font-bold text-white">Rechercher un mate</h3>
-              
-              <div class="text-xs space-y-3 text-slate-300">
-                <div>
-                  <strong class="text-white block mb-0.5">Événement déclencheur :</strong>
-                  Le joueur a envie de pratiquer un sport mais manque de partenaires à son niveau.
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Description de la fonctionnalité :</strong>
-                  Le joueur applique des filtres (sport parmi les 14, niveau de jeu souhaité, zone géographique / ville) pour afficher la liste des mates compatibles et consulter leurs fiches de profil public avec leurs disponibilités.
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Acteur(s) impliqué(s) :</strong>
-                  Joueur (primaire).
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Préconditions :</strong>
-                  Le système possède au moins un profil enregistré dans le périmètre demandé.
-                </div>
-                <div>
-                  <strong class="text-white block mb-0.5">Postconditions :</strong>
-                  Une sélection de profils compatibles est affichée avec la possibilité de leur proposer directement une partie.
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-    </section>
-
   </main>
 
   <!-- ======================================================================
@@ -1135,7 +894,6 @@
         <div class="space-y-2">
           <div class="text-xs font-bold text-white uppercase tracking-wider mb-2">Déploiement & Rendu</div>
           <ul class="space-y-1.5 text-xs">
-            <li><a href="#uml" class="text-mates-green hover:underline">📊 Diagramme UML & Fiches</a></li>
             <li><span class="text-slate-400">Prêt pour hébergement <strong>Render</strong></span></li>
             <li><span class="text-slate-400">Totalement réactif & persistant</span></li>
             <li><span class="text-slate-500">HTML5 / Tailwind CSS / Vanilla JS</span></li>
@@ -1148,7 +906,6 @@
         <div>&copy; 2026 Mates. Tous droits réservés. Projet d'analyse informatique.</div>
         <div class="flex items-center gap-4">
           <span class="text-mates-green font-semibold">🟢 Hébergement Render Ready</span>
-          <a href="#uml" class="hover:underline">Documentation UML</a>
         </div>
       </div>
     </div>

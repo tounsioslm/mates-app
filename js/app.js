@@ -148,10 +148,6 @@ const MatesApp = (() => {
         renderOpenMatches();
         break;
 
-      case "uml":
-        showView("view-uml");
-        break;
-
       default:
         showView("view-home");
         break;
@@ -276,7 +272,6 @@ const MatesApp = (() => {
     renderSportsCatalog();
     renderOpenMatches();
   }
-
   /**
    * Remplissage des sélecteurs de sports
    */
