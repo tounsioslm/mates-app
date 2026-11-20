@@ -1,22 +1,23 @@
 /* ==========================================================================
    MATES. — DESIGN SYSTEM & STYLESHEET
-   Charte graphique inspirée du logo Mates : Vert néon volt (#C0FB18) & Dark Athletic
+   Charte tirée du logo : anthracite mat (#232323) + vert lime du swoosh (#A6E20E)
    ========================================================================== */
 
 :root {
-  --mates-green: #C0FB18;
-  --mates-green-hover: #a6dc0c;
-  --mates-green-light: rgba(192, 251, 24, 0.15);
-  --mates-green-glow: rgba(192, 251, 24, 0.4);
-  --mates-bg-main: #0B0F19;
-  --mates-bg-card: #131A29;
-  --mates-bg-elevated: #1B2438;
-  --mates-border: #23304A;
-  --mates-border-hover: rgba(192, 251, 24, 0.5);
-  --mates-text-primary: #F8FAFC;
-  --mates-text-secondary: #94A3B8;
-  --mates-text-muted: #64748B;
+  --mates-green: #A6E20E;
+  --mates-green-hover: #B4F012;
+  --mates-green-light: rgba(166, 226, 14, 0.15);
+  --mates-green-glow: rgba(166, 226, 14, 0.4);
+  --mates-bg-main: #232323;
+  --mates-bg-card: #2E2E2E;
+  --mates-bg-elevated: #363636;
+  --mates-bg-off: #1A1A1A;
+  --mates-border: #3D3D3D;
+  --mates-text-primary: #FFFFFF;
+  --mates-text-secondary: #A1A1AA;
+  --mates-text-muted: #7A7A82;
   --font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Barlow Condensed', 'Plus Jakarta Sans', sans-serif;
 }
 
 * {
@@ -34,54 +35,106 @@ body {
   min-height: 100vh;
 }
 
+/* Typographie sportive : italique et tranchante comme les lettres de « MATES » */
+body h1, body h2, .font-display {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+  line-height: 0.98;
+}
+
+/* Mot-clé « façon E vert » : haut du mot en vert lime, bas en blanc */
+.hl-e {
+  background: linear-gradient(180deg, var(--mates-green) 0%, var(--mates-green) 52%, #FFFFFF 52%, #FFFFFF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding-right: 0.08em; /* évite de couper l'italique */
+}
+
+/* Mot-clé souligné d'une fine courbe façon swoosh */
+.swoosh-underline {
+  position: relative;
+  white-space: nowrap;
+}
+.swoosh-underline::after {
+  content: "";
+  position: absolute;
+  left: -2%;
+  right: -6%;
+  bottom: -0.18em;
+  height: 0.32em;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 20' preserveAspectRatio='none'><path d='M2 16 C 60 4, 130 2, 198 6' fill='none' stroke='%23A6E20E' stroke-width='4' stroke-linecap='round'/></svg>") no-repeat center / 100% 100%;
+  pointer-events: none;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: var(--mates-bg-off);
 }
 ::-webkit-scrollbar-thumb {
-  background: #23304a;
+  background: var(--mates-border);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--mates-green);
 }
 
-/* Glow & Neon accents */
+/* Glow & accents */
 .neon-glow {
   box-shadow: 0 0 25px var(--mates-green-glow);
 }
 .neon-glow-sm {
-  box-shadow: 0 0 12px rgba(192, 251, 24, 0.25);
+  box-shadow: 0 0 12px rgba(166, 226, 14, 0.25);
 }
 .neon-text-glow {
-  text-shadow: 0 0 15px rgba(192, 251, 24, 0.4);
+  text-shadow: 0 0 15px rgba(166, 226, 14, 0.35);
 }
 
 .text-mates-green {
   color: var(--mates-green);
 }
-
 .bg-mates-green {
   background-color: var(--mates-green);
 }
-
 .border-mates-green {
   border-color: var(--mates-green);
 }
 
 /* Gradients */
 .hero-gradient {
-  background: radial-gradient(circle at 50% 20%, rgba(192, 251, 24, 0.12) 0%, rgba(11, 15, 25, 0) 70%),
-              linear-gradient(180deg, #0b0f19 0%, #0d1320 100%);
+  background: radial-gradient(circle at 70% 30%, rgba(166, 226, 14, 0.10) 0%, rgba(35, 35, 35, 0) 60%),
+              linear-gradient(180deg, #232323 0%, #1F1F1F 100%);
 }
 
 .card-gradient {
-  background: linear-gradient(135deg, rgba(27, 36, 56, 0.6) 0%, rgba(19, 26, 41, 0.95) 100%);
+  background: linear-gradient(135deg, rgba(54, 54, 54, 0.6) 0%, rgba(46, 46, 46, 0.95) 100%);
 }
+
+/* Swoosh lumineux derrière la carte de match de l'accueil */
+.hero-swoosh {
+  position: absolute;
+  inset: -18% -22% -10% -28%;
+  width: 150%;
+  height: 130%;
+  pointer-events: none;
+  z-index: 0;
+  filter: drop-shadow(0 0 10px rgba(166, 226, 14, 0.55));
+  animation: swooshIn 1.2s ease-out both;
+}
+.hero-swoosh path {
+  stroke-dasharray: 900;
+  stroke-dashoffset: 900;
+  animation: swooshDraw 1.4s 0.2s ease-out forwards;
+}
+@keyframes swooshDraw { to { stroke-dashoffset: 0; } }
+@keyframes swooshIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Grille de disponibilités (Wireframes 5 & 6) */
 .availability-grid {
@@ -98,11 +151,12 @@ body {
   }
 }
 
+/* Créneau indisponible : gris très sombre pour un contraste immédiat */
 .availability-cell {
   aspect-ratio: 1.4;
   border-radius: 8px;
-  border: 1px solid var(--mates-border);
-  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid #262626;
+  background-color: var(--mates-bg-off);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
@@ -111,13 +165,13 @@ body {
   color: var(--mates-text-muted);
 }
 
-/* Wireframe: "cases actives en foncé / vert" */
+/* Créneau disponible : vert lime vif */
 .availability-cell.active {
   background-color: var(--mates-green);
   border-color: var(--mates-green);
-  color: #0b0f19;
+  color: #232323;
   font-weight: 700;
-  box-shadow: 0 2px 8px rgba(192, 251, 24, 0.35);
+  box-shadow: 0 2px 10px rgba(166, 226, 14, 0.35);
 }
 
 .availability-cell.interactive {
@@ -129,14 +183,14 @@ body {
   transform: translateY(-2px);
 }
 
-/* Boutons personnalisés */
+/* Bouton principal : fond vert lime, texte anthracite, lueur au survol */
 .btn-neon {
   background-color: var(--mates-green);
-  color: #0b0f19;
-  font-weight: 700;
+  color: #232323;
+  font-weight: 800;
   padding: 0.75rem 1.5rem;
   border-radius: 0.75rem;
-  transition: all 0.25s ease;
+  transition: background-color 0.2s ease, box-shadow 0.25s ease, transform 0.2s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -147,18 +201,26 @@ body {
 
 .btn-neon:hover {
   background-color: var(--mates-green-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(192, 251, 24, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 0 15px rgba(166, 226, 14, 0.4);
 }
 
+.btn-neon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Bouton secondaire : transparent, fine bordure blanche, texte blanc */
 .btn-outline-neon {
   background-color: transparent;
-  color: var(--mates-text-primary);
-  border: 1.5px solid var(--mates-border);
+  color: #FFFFFF;
+  border: 1px solid #FFFFFF;
   font-weight: 600;
   padding: 0.75rem 1.5rem;
   border-radius: 0.75rem;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -169,7 +231,7 @@ body {
 .btn-outline-neon:hover {
   border-color: var(--mates-green);
   color: var(--mates-green);
-  background-color: rgba(192, 251, 24, 0.05);
+  background-color: rgba(166, 226, 14, 0.06);
 }
 
 /* Animations transitions */
@@ -190,9 +252,9 @@ body {
 
 /* Badges & Tags */
 .badge-sport {
-  background: rgba(192, 251, 24, 0.12);
+  background: rgba(166, 226, 14, 0.12);
   color: var(--mates-green);
-  border: 1px solid rgba(192, 251, 24, 0.3);
+  border: 1px solid rgba(166, 226, 14, 0.3);
   padding: 0.25rem 0.6rem;
   border-radius: 9999px;
   font-size: 0.75rem;
@@ -204,12 +266,174 @@ body {
 
 .badge-level {
   background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  color: #E4E4E7;
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 0.25rem 0.6rem;
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+/* « Reste 1 place » & statuts verts */
+.badge-spots {
+  background: rgba(166, 226, 14, 0.15);
+  color: var(--mates-green);
+  border: 1px solid rgba(166, 226, 14, 0.35);
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge-neutral {
+  background: rgba(255, 255, 255, 0.06);
+  color: #D4D4D8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-full {
+  background: rgba(255, 255, 255, 0.04);
+  color: #7A7A82;
+  border: 1px solid #3D3D3D;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Indicateurs de confiance (cartes joueurs) */
+.trust-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.5rem;
+  background: var(--mates-bg-off);
+  border: 1px solid #333333;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #D4D4D8;
+  white-space: nowrap;
+}
+.trust-chip strong { color: #FFFFFF; }
+
+/* Badges de succès (gamification) */
+.achievement {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  background: var(--mates-bg-elevated);
+  border: 1px solid var(--mates-border);
+}
+.achievement.locked { opacity: 0.45; filter: grayscale(1); }
+.achievement-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  background: rgba(166, 226, 14, 0.12);
+  border: 1px solid rgba(166, 226, 14, 0.3);
+}
+
+/* Résultats V / D */
+.result-pill {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+.result-pill.win { background: var(--mates-green); color: #232323; }
+.result-pill.loss { background: #3D3D3D; color: #D4D4D8; }
+
+/* Halo vert autour des joueurs « Dispo ce soir » */
+.live-halo {
+  box-shadow: 0 0 0 3px var(--mates-green), 0 0 18px 4px rgba(166, 226, 14, 0.55) !important;
+  animation: livePulse 2.2s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--mates-green), 0 0 12px 2px rgba(166, 226, 14, 0.45); }
+  50% { box-shadow: 0 0 0 3px var(--mates-green), 0 0 22px 6px rgba(166, 226, 14, 0.65); }
+}
+
+/* Interrupteur « Dispo ce soir » */
+.switch {
+  position: relative;
+  width: 2.75rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: #3D3D3D;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  transition: transform 0.2s ease;
+}
+.switch[aria-checked="true"] { background: var(--mates-green); }
+.switch[aria-checked="true"]::after { transform: translateX(1.25rem); background: #232323; }
+
+/* Filtres rapides en pilules */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid var(--mates-border);
+  background: var(--mates-bg-card);
+  color: #D4D4D8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.pill:hover { border-color: #FFFFFF; color: #FFFFFF; }
+.pill.active {
+  background: var(--mates-green);
+  border-color: var(--mates-green);
+  color: #232323;
+}
+
+/* Infobulle niveaux */
+.level-help { position: relative; display: inline-flex; }
+.level-help-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -0.5rem;
+  z-index: 40;
+  width: min(20rem, 80vw);
+  padding: 1rem;
+  border-radius: 1rem;
+  background: var(--mates-bg-elevated);
+  border: 1px solid var(--mates-border);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
 }
 
 /* Cartes Sports & Mates */
@@ -221,13 +445,62 @@ body {
 .sport-card-tile:hover {
   transform: translateY(-4px);
   border-color: var(--mates-green);
-  box-shadow: 0 10px 25px -5px rgba(192, 251, 24, 0.15);
+  box-shadow: 0 10px 25px -5px rgba(166, 226, 14, 0.15);
+}
+
+/* Mini-chat de match */
+.chat-bubble {
+  max-width: 85%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.9rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  background: var(--mates-bg-elevated);
+  border: 1px solid var(--mates-border);
+  overflow-wrap: anywhere;
+}
+.chat-bubble.mine {
+  margin-left: auto;
+  background: rgba(166, 226, 14, 0.14);
+  border-color: rgba(166, 226, 14, 0.35);
 }
 
 /* Modal dialogs */
 .modal-overlay {
-  background-color: rgba(6, 9, 15, 0.85);
+  background-color: rgba(20, 20, 20, 0.85);
   backdrop-filter: blur(8px);
+}
+
+/* Barre d'onglets mobile (navigation au pouce) */
+.bottom-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: rgba(30, 30, 30, 0.96);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--mates-border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.bottom-tabbar a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 0 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #A1A1AA;
+}
+.bottom-tabbar a.active { color: var(--mates-green); }
+@media (max-width: 767px) {
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+}
+@media (min-width: 768px) {
+  .bottom-tabbar { display: none; }
 }
 
 /* Toast Notification */
@@ -239,16 +512,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-width: min(380px, calc(100vw - 32px));
+}
+@media (max-width: 767px) {
+  #toast-container { bottom: calc(76px + env(safe-area-inset-bottom)); right: 16px; }
 }
 .toast-msg {
-  background: #1e293b;
-  border: 1px solid var(--mates-green);
+  background: #2E2E2E;
+  border: 1px solid var(--mates-border);
+  border-left: 4px solid var(--mates-green);
   color: white;
-  padding: 12px 20px;
-  border-radius: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0,0,0,0.5);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   animation: slideIn 0.3s ease-out;
 }
@@ -261,4 +539,9 @@ body {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-swoosh, .hero-swoosh path, .live-halo, .fade-in, .toast-msg { animation: none !important; }
+  .hero-swoosh path { stroke-dashoffset: 0; }
 }

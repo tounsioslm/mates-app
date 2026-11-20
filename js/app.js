@@ -7,7 +7,10 @@ const MatesApp = (() => {
   // Clés de stockage LocalStorage
   const STORAGE_KEY_PROFILE = "mates_user_profile";
   const STORAGE_KEY_AUTH = "mates_is_authenticated";
-  const STORAGE_KEY_MATCHES = "mates_open_matches";
+  const STORAGE_KEY_MATCHES = "mates_open_matches"; // ancien format, nettoyé au chargement
+  const STORAGE_KEY_MATCH_STATE = "mates_match_state_v2";
+  const STORAGE_KEY_LIVE = "mates_live_until";
+  const STORAGE_KEY_ALERTS = "mates_search_alerts";
 
   // Hash présent au chargement (retour d'un lien email / Google de Supabase)
   const INITIAL_HASH = window.location.hash || "";
@@ -52,6 +55,14 @@ const MatesApp = (() => {
     },
     // Profils des vrais inscrits (Supabase)
     remoteMates: [],
+    // Matchs : inscriptions, matchs créés et messages (sauvegardés en localStorage)
+    matchState: { joined: {}, created: [], chat: {} },
+    matesWhen: null,
+    matchesWhen: null,
+    liveUntil: 0,
+    weather: {},
+    openMatchId: null,
+    countdownTimer: null,
     sessionReady: !SB,
     // Données temporaires d'édition du profil
     editingProfile: null,
@@ -126,12 +137,427 @@ const MatesApp = (() => {
       availability: cleanAvailability(row.availability),
       matchesPlayed: 0,
       fairPlayScore: null,
+      liveUntil: row.live_until || null,
       isNew: true
     };
   }
 
   function getAllMates() {
     return state.remoteMates.concat(INITIAL_MATES);
+  }
+
+  /* ==========================================================================
+     OUTILS : stockage local, dates, échappement HTML
+     ========================================================================== */
+  function readStore(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function writeStore(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* stockage indisponible */ }
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  function startOfDay(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function dayName(date) {
+    return DAYS_OF_WEEK[(new Date(date).getDay() + 6) % 7]; // Lundi = 0
+  }
+
+  function addDays(date, n) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  // Prochain samedi (6) / dimanche (0) : aujourd'hui compris
+  function nextWeekday(target) {
+    const today = startOfDay(new Date());
+    const diff = (target - today.getDay() + 7) % 7;
+    return addDays(today, diff);
+  }
+
+  function formatMatchDay(date) {
+    const d = startOfDay(date);
+    const today = startOfDay(new Date());
+    const diff = Math.round((d - today) / 86400000);
+    if (diff === 0) return "Aujourd'hui";
+    if (diff === 1) return "Demain";
+    return d.toLocaleDateString("fr-BE", { weekday: "long", day: "numeric", month: "long" })
+      .replace(/^./, c => c.toUpperCase());
+  }
+
+  function formatHour(date) {
+    return new Date(date).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function formatAgo(date) {
+    const minutes = Math.max(0, Math.round((Date.now() - new Date(date).getTime()) / 60000));
+    if (minutes < 1) return "à l'instant";
+    if (minutes < 60) return `il y a ${minutes} min`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `il y a ${hours} h`;
+    return `il y a ${Math.round(hours / 24)} j`;
+  }
+
+  function isTonight(date) {
+    const d = new Date(date);
+    return startOfDay(d).getTime() === startOfDay(new Date()).getTime() && d.getHours() >= 17;
+  }
+
+  function isTomorrow(date) {
+    return startOfDay(date).getTime() === startOfDay(addDays(new Date(), 1)).getTime();
+  }
+
+  function isThisWeekend(date) {
+    const d = startOfDay(date);
+    const sat = nextWeekday(6);
+    const sun = addDays(sat, 1);
+    const today = startOfDay(new Date());
+    // Si on est dimanche, « ce week-end » = aujourd'hui
+    if (today.getDay() === 0) return d.getTime() === today.getTime();
+    return d.getTime() === sat.getTime() || d.getTime() === sun.getTime();
+  }
+
+  function sportMeta(sportId) {
+    return INITIAL_SPORTS.find(sp => sp.id === sportId) || { id: sportId, name: "Sport", icon: "🏅" };
+  }
+
+  /* ==========================================================================
+     DISPO CE SOIR ⚡
+     ========================================================================== */
+  function endOfToday() {
+    const d = new Date();
+    d.setHours(23, 59, 59, 0);
+    return d.getTime();
+  }
+
+  function isMeLive() {
+    return state.liveUntil > Date.now();
+  }
+
+  function isMateLive(mate) {
+    if (mate.id === "my-profile") return isMeLive();
+    if (mate.liveUntil) return new Date(mate.liveUntil).getTime() > Date.now();
+    return !!mate.liveTonight;
+  }
+
+  function syncLiveToggles() {
+    document.querySelectorAll("#live-toggle-mates, #live-toggle-dash").forEach(btn => {
+      btn.setAttribute("aria-checked", isMeLive() ? "true" : "false");
+    });
+  }
+
+  async function toggleLiveTonight() {
+    if (!requireAuth("Connecte-toi pour indiquer que tu es dispo ce soir.")) {
+      syncLiveToggles();
+      return;
+    }
+    state.liveUntil = isMeLive() ? 0 : endOfToday();
+    writeStore(STORAGE_KEY_LIVE, state.liveUntil);
+    syncLiveToggles();
+
+    if (SB && state.userProfile && state.userProfile.userId) {
+      const { error } = await SB.from("profiles")
+        .update({ live_until: state.liveUntil ? new Date(state.liveUntil).toISOString() : null })
+        .eq("id", state.userProfile.userId);
+      if (error) console.warn("Statut « dispo ce soir » non synchronisé :", error.message);
+    }
+
+    showToast(isMeLive()
+      ? "Tu es dispo ce soir ⚡ Tu apparais en premier pour les autres mates jusqu'à minuit."
+      : "Statut « dispo ce soir » désactivé.", isMeLive() ? "success" : "info");
+  }
+
+  /* ==========================================================================
+     CONFIANCE, PROGRESSION & BADGES
+     ========================================================================== */
+  function trustChipsHtml(mate) {
+    if (mate.isNew && !mate.matchesPlayed) {
+      return `<span class="trust-chip"><i data-lucide="sparkles" class="w-3 h-3 text-mates-green"></i>Nouveau membre</span>`;
+    }
+    const chips = [];
+    if (mate.punctuality != null) chips.push(`<span class="trust-chip" title="Arrive à l'heure aux matchs"><i data-lucide="clock" class="w-3 h-3 text-mates-green"></i><strong>${mate.punctuality} %</strong> ponctuel</span>`);
+    if (mate.matchesPlayed) chips.push(`<span class="trust-chip"><i data-lucide="swords" class="w-3 h-3 text-mates-green"></i><strong>${mate.matchesPlayed}</strong> matchs joués</span>`);
+    if (mate.fairPlayScore) chips.push(`<span class="trust-chip" title="Note moyenne laissée par les autres joueurs"><i data-lucide="heart-handshake" class="w-3 h-3 text-mates-green"></i>Fair-play <strong>${Number(mate.fairPlayScore).toFixed(1)}</strong>/5</span>`);
+    return chips.join("");
+  }
+
+  function getBadges(mate) {
+    const played = mate.matchesPlayed || 0;
+    const organized = mate.matchesOrganized || 0;
+    const early = mate.earlyMatches || 0;
+    const sportsCount = (mate.sports || []).length;
+    return [
+      { icon: "🧩", title: "Multisport", desc: `${sportsCount}/3 disciplines pratiquées`, earned: sportsCount >= 3 },
+      { icon: "🏛️", title: "Pilier de la communauté", desc: `${Math.min(organized, 10)}/10 matchs organisés`, earned: organized >= 10 },
+      { icon: "🌅", title: "Lève-tôt", desc: `${Math.min(early, 5)}/5 matchs joués avant 9h`, earned: early >= 5 },
+      { icon: "⏱️", title: "Toujours à l'heure", desc: "100 % de ponctualité sur 10 matchs", earned: mate.punctuality === 100 && played >= 10 },
+      { icon: "🤝", title: "Esprit fair-play", desc: "Note fair-play ≥ 4,9 / 5", earned: (mate.fairPlayScore || 0) >= 4.9 },
+      { icon: "🔥", title: "Habitué", desc: `${Math.min(played, 50)}/50 matchs joués`, earned: played >= 50 }
+    ];
+  }
+
+  function badgesHtml(mate) {
+    return getBadges(mate)
+      .sort((a, b) => Number(b.earned) - Number(a.earned))
+      .map(b => `
+        <div class="achievement ${b.earned ? "" : "locked"}">
+          <div class="achievement-icon">${b.icon}</div>
+          <div class="min-w-0">
+            <div class="text-sm font-bold text-white truncate">${b.title}</div>
+            <div class="text-[11px] text-slate-400">${b.earned ? "✓ " : ""}${b.desc}</div>
+          </div>
+        </div>`).join("");
+  }
+
+  function progressHtml(mate) {
+    const recent = Array.isArray(mate.recent) ? mate.recent.slice(0, 3) : [];
+    if (mate.levelScore == null && recent.length === 0) {
+      return `
+        <div class="text-center py-6 space-y-2">
+          <div class="text-4xl">🏁</div>
+          <p class="text-sm text-slate-300">Pas encore de match joué.</p>
+          <p class="text-xs text-slate-500">Le niveau Mates se calcule après le premier match.</p>
+        </div>`;
+    }
+    const trend = mate.levelTrend || 0;
+    const trendHtml = trend > 0
+      ? `<span class="text-mates-green font-bold">▲ +${trend.toFixed(1)}</span>`
+      : trend < 0
+        ? `<span class="text-rose-400 font-bold">▼ ${trend.toFixed(1)}</span>`
+        : `<span class="text-slate-400 font-bold">= stable</span>`;
+    const mainSport = mate.sports && mate.sports[0] ? mate.sports[0].name : "Multisport";
+    const pct = Math.max(0, Math.min(100, ((mate.levelScore || 0) / 5) * 100));
+    return `
+      <div class="flex items-end justify-between gap-4">
+        <div>
+          <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Niveau Mates · ${mainSport}</div>
+          <div class="font-display text-5xl text-white leading-none mt-1">Nv. ${(mate.levelScore || 0).toFixed(1)}</div>
+        </div>
+        <div class="text-right text-xs text-slate-400">${trendHtml}<br>ce mois-ci</div>
+      </div>
+      <div class="h-2 rounded-full bg-mates-off mt-3 overflow-hidden"><div class="h-full bg-mates-green rounded-full" style="width:${pct}%"></div></div>
+      <div class="mt-5 space-y-2">
+        <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">3 derniers matchs</div>
+        ${recent.map(r => `
+          <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-mates-off border border-slate-800">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="result-pill ${r.result === "V" ? "win" : "loss"}">${r.result}</span>
+              <div class="min-w-0">
+                <div class="text-sm font-semibold text-white truncate">${r.sport}</div>
+                <div class="text-[11px] text-slate-500">${r.when}</div>
+              </div>
+            </div>
+            <span class="text-sm font-bold ${r.result === "V" ? "text-mates-green" : "text-slate-300"} whitespace-nowrap">${r.score}</span>
+          </div>`).join("")}
+      </div>`;
+  }
+
+  /* ==========================================================================
+     MATCHS : données datées + inscriptions locales
+     ========================================================================== */
+  const OUTDOOR_SPORTS = ["football", "tennis", "running", "rugby", "volleyball", "basketball"];
+
+  function loadMatchState() {
+    const saved = readStore(STORAGE_KEY_MATCH_STATE, null);
+    state.matchState = {
+      joined: (saved && saved.joined) || {},
+      created: (saved && Array.isArray(saved.created)) ? saved.created : [],
+      chat: (saved && saved.chat) || {}
+    };
+    // Nettoyage de l'ancien format
+    try { localStorage.removeItem(STORAGE_KEY_MATCHES); } catch (e) { /* ignore */ }
+  }
+
+  function saveMatchState() {
+    writeStore(STORAGE_KEY_MATCH_STATE, state.matchState);
+  }
+
+  function computeStart(match) {
+    let base;
+    if (match.day === "sat") base = nextWeekday(6);
+    else if (match.day === "sun") base = nextWeekday(0);
+    else base = addDays(startOfDay(new Date()), Number(match.day) || 0);
+    const [h, m] = String(match.start || "19:00").split(":").map(Number);
+    base.setHours(h || 0, m || 0, 0, 0);
+    // Un match de démo déjà passé aujourd'hui est décalé au lendemain
+    if (base.getTime() + (match.durationMin || 60) * 60000 < Date.now()) base = addDays(base, match.day === "sat" || match.day === "sun" ? 7 : 1);
+    return base;
+  }
+
+  function buildMatches() {
+    const demo = INITIAL_OPEN_MATCHES.map(m => Object.assign({}, m, {
+      startsAt: computeStart(m).toISOString(),
+      players: m.players.slice(),
+      chat: m.chat.map(c => Object.assign({}, c, { at: new Date(Date.now() - c.ago * 60000).toISOString() }))
+    }));
+    const now = Date.now();
+    const created = state.matchState.created
+      .filter(m => new Date(m.startsAt).getTime() + (m.durationMin || 60) * 60000 > now - 86400000)
+      .map(m => Object.assign({}, m, { players: m.players.slice(), chat: [] }));
+    return created.concat(demo).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+  }
+
+  function getMatch(id) {
+    return state.matches.find(m => m.id === id) || null;
+  }
+
+  function myPlayerEntry() {
+    const p = state.userProfile || {};
+    return {
+      name: `${p.firstName || "Moi"}${p.lastName ? " " + p.lastName.charAt(0) + "." : ""}`,
+      avatar: p.avatar || DEFAULT_AVATAR,
+      mateId: "my-profile",
+      me: true
+    };
+  }
+
+  function isJoined(match) {
+    return !!state.matchState.joined[match.id] || !!match.mine;
+  }
+
+  function matchPlayers(match) {
+    const players = match.players.slice();
+    if (state.matchState.joined[match.id] && state.isAuthenticated) players.push(myPlayerEntry());
+    return players;
+  }
+
+  function matchChat(match) {
+    return (match.chat || []).concat(state.matchState.chat[match.id] || []);
+  }
+
+  function remainingSlots(match) {
+    return Math.max(0, match.totalSlots - matchPlayers(match).length);
+  }
+
+  function priceLabel(match) {
+    return match.price > 0 ? `${String(match.price).replace(".", ",")} € / pers.` : "Gratuit";
+  }
+
+  function statusBadgeHtml(match) {
+    const players = matchPlayers(match).length;
+    if (match.courtBooked) {
+      return `<span class="badge-spots inline-flex items-center gap-1"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>Terrain réservé & confirmé</span>`;
+    }
+    return `<span class="badge-neutral inline-flex items-center gap-1"><i data-lucide="hourglass" class="w-3.5 h-3.5"></i>En attente du ${players + 1}e joueur</span>`;
+  }
+
+  function spotsBadgeHtml(match) {
+    const r = remainingSlots(match);
+    if (r === 0) return `<span class="badge-full">Complet</span>`;
+    return `<span class="badge-spots">Reste ${r} place${r > 1 ? "s" : ""}</span>`;
+  }
+
+  function mapsLinks(match) {
+    const q = encodeURIComponent(`${match.clubName}, ${match.city}, Belgique`);
+    return {
+      google: `https://www.google.com/maps/search/?api=1&query=${q}`,
+      waze: `https://waze.com/ul?q=${q}&navigate=yes`
+    };
+  }
+
+  function matchShareUrl(match) {
+    return `${siteUrl()}#match/${encodeURIComponent(match.id)}`;
+  }
+
+  /* ==========================================================================
+     MÉTÉO (Open-Meteo, gratuit et sans clé) pour les sports en extérieur
+     ========================================================================== */
+  const WEATHER_CODES = [
+    { max: 0, label: "Ensoleillé", icon: "sun" },
+    { max: 2, label: "Éclaircies", icon: "cloud-sun" },
+    { max: 3, label: "Couvert", icon: "cloud" },
+    { max: 48, label: "Brouillard", icon: "cloud-fog" },
+    { max: 57, label: "Bruine", icon: "cloud-drizzle" },
+    { max: 67, label: "Pluie", icon: "cloud-rain" },
+    { max: 77, label: "Neige", icon: "snowflake" },
+    { max: 82, label: "Averses", icon: "cloud-rain" },
+    { max: 86, label: "Neige", icon: "snowflake" },
+    { max: 99, label: "Orage", icon: "cloud-lightning" }
+  ];
+
+  function loadWeather() {
+    const cities = [...new Set(state.matches.filter(m => m.outdoor).map(m => normalizeCity(m.city)))];
+    cities.forEach(key => {
+      const coords = CITY_COORDS[key];
+      if (!coords || state.weather[key]) return;
+      state.weather[key] = "loading";
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}` +
+        `&hourly=temperature_2m,weather_code&forecast_days=8&timezone=Europe%2FBrussels`;
+      fetch(url)
+        .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+        .then(data => {
+          state.weather[key] = data.hourly || null;
+          if (state.currentRoute === "matches" || state.currentRoute === "match") renderOpenMatches();
+          if (state.openMatchId) renderMatchDetail(state.openMatchId);
+          if (state.currentRoute === "dashboard") renderDashboard();
+        })
+        .catch(err => {
+          console.warn("Météo indisponible :", err.message);
+          state.weather[key] = null;
+        });
+    });
+  }
+
+  function weatherFor(match) {
+    if (!match.outdoor) return null;
+    const hourly = state.weather[normalizeCity(match.city)];
+    if (!hourly || hourly === "loading" || !Array.isArray(hourly.time)) return null;
+    const d = new Date(match.startsAt);
+    const pad = n => String(n).padStart(2, "0");
+    const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:00`;
+    const i = hourly.time.indexOf(key);
+    if (i < 0) return null;
+    const code = hourly.weather_code[i];
+    const meta = WEATHER_CODES.find(w => code <= w.max) || WEATHER_CODES[2];
+    return { temp: Math.round(hourly.temperature_2m[i]), label: meta.label, icon: meta.icon };
+  }
+
+  function weatherChipHtml(match) {
+    const w = weatherFor(match);
+    if (!w) return "";
+    return `<span class="inline-flex items-center gap-1 text-slate-300" title="Prévision météo au coup d'envoi"><i data-lucide="${w.icon}" class="w-3.5 h-3.5 text-mates-green"></i>${w.temp}°C • ${w.label}</span>`;
+  }
+
+  /* ==========================================================================
+     TITRE D'ONGLET + BARRE MOBILE
+     ========================================================================== */
+  function setTitle(text) {
+    document.title = text ? `Mates — ${text}` : "Mates — Trouve tes partenaires de sport et réserve ton terrain";
+  }
+
+  function updateMatesTitle() {
+    const sport = state.filters.sport !== "all" ? sportMeta(state.filters.sport).name : null;
+    const city = state.filters.city !== "all" ? state.filters.city : null;
+    if (sport && city) setTitle(`${sport} à ${city}`);
+    else if (sport) setTitle(`Partenaires de ${sport}`);
+    else if (city) setTitle(`Sport à ${city}`);
+    else setTitle("Trouver un partenaire de sport");
+  }
+
+  function updateTabbar(route) {
+    const map = { home: "home", mates: "mates", mate: "mates", matches: "matches", match: "matches", dashboard: "dashboard", "edit-profile": "dashboard", auth: "dashboard" };
+    const active = map[route] || "";
+    document.querySelectorAll(".bottom-tabbar a").forEach(a => {
+      a.classList.toggle("active", a.dataset.tab === active);
+      if (a.dataset.tab === active) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
   }
 
   function siteUrl() {
@@ -191,6 +617,10 @@ const MatesApp = (() => {
     state.userProfile = profileFromRow(profileRow, true);
     state.userProfile.email = user.email;
     state.isAuthenticated = true;
+    if (profileRow.live_until) {
+      state.liveUntil = new Date(profileRow.live_until).getTime() || 0;
+      writeStore(STORAGE_KEY_LIVE, state.liveUntil);
+    }
     renderHeaderUserSection();
   }
 
@@ -216,7 +646,7 @@ const MatesApp = (() => {
   function goAfterLogin() {
     const p = state.userProfile;
     const incomplete = !p || !p.city || p.sports.length === 0;
-    window.location.hash = incomplete ? "#edit-profile" : "#mates";
+    window.location.hash = incomplete ? "#edit-profile" : "#dashboard";
   }
 
   function translateAuthError(err) {
@@ -278,18 +708,12 @@ const MatesApp = (() => {
       state.userProfile = null;
     }
 
-    // Matchs ouverts
-    const savedMatches = localStorage.getItem(STORAGE_KEY_MATCHES);
-    if (savedMatches) {
-      try {
-        state.matches = JSON.parse(savedMatches);
-      } catch (e) {
-        state.matches = JSON.parse(JSON.stringify(INITIAL_OPEN_MATCHES));
-      }
-    } else {
-      state.matches = JSON.parse(JSON.stringify(INITIAL_OPEN_MATCHES));
-      localStorage.setItem(STORAGE_KEY_MATCHES, JSON.stringify(state.matches));
-    }
+    // Matchs ouverts (dates recalculées + inscriptions / créations / messages sauvegardés)
+    loadMatchState();
+    state.matches = buildMatches();
+
+    // Statut « dispo ce soir »
+    state.liveUntil = Number(readStore(STORAGE_KEY_LIVE, 0)) || 0;
   }
 
   /**
@@ -307,6 +731,11 @@ const MatesApp = (() => {
     try { if (param) param = decodeURIComponent(param); } catch (e) { /* hash mal formé */ }
 
     state.currentRoute = mainView;
+    if (mainView !== "match") closeModals(true);
+    if (mainView !== "dashboard" && state.countdownTimer) {
+      clearInterval(state.countdownTimer);
+      state.countdownTimer = null;
+    }
 
     // Cacher toutes les vues
     document.querySelectorAll(".page-view").forEach(el => {
@@ -316,10 +745,12 @@ const MatesApp = (() => {
 
     // Mettre à jour l'état de la navbar
     updateNavLinks(mainView);
+    updateTabbar(mainView);
 
     // Routage vers la vue demandée
     switch (mainView) {
       case "home":
+        setTitle(null);
         showView("view-home");
         break;
 
@@ -331,15 +762,19 @@ const MatesApp = (() => {
         }
         showView("view-mates");
         renderMatesGrid();
+        updateMatesTitle();
+        syncLiveToggles();
         break;
 
       case "sports":
+        setTitle("Les 14 sports");
         showView("view-sports");
         renderSportsCatalog();
         break;
 
       case "sport":
         state.selectedSportId = param || "padel";
+        setTitle(sportMeta(state.selectedSportId).name);
         showView("view-single-sport");
         renderSingleSportPage(state.selectedSportId);
         break;
@@ -353,27 +788,55 @@ const MatesApp = (() => {
       case "edit-profile":
         if (!state.sessionReady) return; // session en cours de vérification
         if (!state.isAuthenticated) {
-          window.location.hash = "#auth";
-          showToast("Veuillez vous connecter pour modifier votre profil.", "info");
+          window.location.hash = "#auth/login";
+          showToast("Connecte-toi pour modifier ton profil.", "info");
           return;
         }
+        setTitle("Mon profil");
         showView("view-edit-profile");
         initEditProfileForm();
         break;
 
       case "auth":
         if (state.sessionReady && state.isAuthenticated && SB) {
-          window.location.hash = "#edit-profile";
+          window.location.hash = "#dashboard";
           return;
         }
         if (param === "register" || param === "login") state.authMode = param;
+        setTitle(state.authMode === "register" ? "Inscription" : "Connexion");
         showView("view-auth");
         updateAuthCard();
         break;
 
       case "matches":
+        setTitle("Matchs ouverts");
         showView("view-matches");
         renderOpenMatches();
+        break;
+
+      case "match": {
+        showView("view-matches");
+        renderOpenMatches();
+        const match = getMatch(param);
+        if (match) {
+          openMatchDetail(match.id, true);
+        } else {
+          setTitle("Matchs ouverts");
+          showToast("Ce match n'existe plus ou est déjà terminé.", "info");
+        }
+        break;
+      }
+
+      case "dashboard":
+        if (!state.sessionReady) return;
+        if (!state.isAuthenticated) {
+          window.location.hash = "#auth/login";
+          showToast("Connecte-toi pour accéder à ton espace.", "info");
+          return;
+        }
+        setTitle("Mon espace");
+        showView("view-dashboard");
+        renderDashboard();
         break;
 
       default:
@@ -398,7 +861,7 @@ const MatesApp = (() => {
     document.querySelectorAll(".nav-link").forEach(link => {
       const href = link.getAttribute("href") || "";
       if (href === `#${activeHash}` || (activeHash === "sport" && href === "#sports") || (activeHash === "mate" && href === "#mates")) {
-        link.className = "nav-link px-5 py-2 rounded-full text-sm font-bold bg-mates-green text-black shadow-md transition-all";
+        link.className = "nav-link px-5 py-2 rounded-full text-sm font-bold bg-mates-green text-mates-dark shadow-md transition-all";
       } else {
         link.className = "nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300";
       }
@@ -416,11 +879,11 @@ const MatesApp = (() => {
 
     if (state.isAuthenticated && state.userProfile) {
       container.innerHTML = `
-        <a href="#edit-profile" class="flex items-center gap-2.5 bg-mates-card hover:bg-mates-cardElevated border border-mates-border hover:border-mates-green/60 p-1.5 pr-3.5 rounded-full transition-all group">
+        <a href="#dashboard" class="flex items-center gap-2.5 bg-mates-card hover:bg-mates-cardElevated border border-mates-border hover:border-mates-green/60 p-1.5 pr-3.5 rounded-full transition-all group">
           <img src="${state.userProfile.avatar}" alt="${state.userProfile.firstName}" class="w-8 h-8 rounded-full object-cover ring-2 ring-mates-green">
           <div class="text-left hidden sm:block leading-tight">
             <div class="text-xs font-bold text-white group-hover:text-mates-green transition-colors">${state.userProfile.firstName}</div>
-            <div class="text-[10px] text-slate-400">Mon profil</div>
+            <div class="text-[10px] text-slate-400">Mon espace</div>
           </div>
         </a>
       `;
@@ -439,7 +902,7 @@ const MatesApp = (() => {
     const mobileAuth = document.getElementById("mobile-auth-links");
     if (mobileAuth) {
       mobileAuth.innerHTML = state.isAuthenticated && state.userProfile
-        ? `<a href="#edit-profile" class="block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Mon profil</a>`
+        ? `<a href="#dashboard" class="block px-4 py-2 rounded-lg font-semibold bg-mates-green text-mates-dark text-center">Mon espace</a>`
         : `<a href="#auth/register" class="block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Créer mon profil</a>
            <a href="#auth/login" class="block px-4 py-2 rounded-lg font-semibold border border-mates-border text-center">Se connecter</a>`;
     }
@@ -493,6 +956,23 @@ const MatesApp = (() => {
       resetBtn.addEventListener("click", resetFilters);
     }
 
+    // Échap ferme les fenêtres, un clic ailleurs ferme l'infobulle des niveaux
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeModals();
+        const panel = document.getElementById("level-help-panel");
+        if (panel) panel.classList.add("hidden");
+      }
+    });
+    document.addEventListener("click", (e) => {
+      const panel = document.getElementById("level-help-panel");
+      if (panel && !panel.classList.contains("hidden") && !e.target.closest(".level-help")) {
+        panel.classList.add("hidden");
+        const btn = document.getElementById("level-help-btn");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+      }
+    });
+
     // Recherche dans le catalogue des sports
     const sportSearchInput = document.getElementById("search-sport-input");
     if (sportSearchInput) {
@@ -522,6 +1002,11 @@ const MatesApp = (() => {
     const proposeSportSelect = document.getElementById("propose-sport-select");
 
     const optionsHtml = INITIAL_SPORTS.map(s => `<option value="${s.id}">${s.icon} ${s.name}</option>`).join("");
+
+    const heroSport = document.getElementById("hero-sport");
+    if (heroSport) heroSport.innerHTML = `<option value="all">Tous les sports</option>` + optionsHtml;
+    const cmSport = document.getElementById("cm-sport");
+    if (cmSport) cmSport.innerHTML = optionsHtml;
 
     if (filterSportSelect) {
       filterSportSelect.innerHTML = `<option value="all">Tous les 14 sports</option>` + optionsHtml;
@@ -556,6 +1041,20 @@ const MatesApp = (() => {
   }
 
   function populateCityDropdown() {
+    const cityOptions = getCityOptions().map(c => `<option value="${c}">${c}</option>`).join("");
+    const heroCity = document.getElementById("hero-city");
+    if (heroCity) {
+      const current = heroCity.value || "all";
+      heroCity.innerHTML = `<option value="all">Toutes les villes</option>` + cityOptions;
+      heroCity.value = current;
+    }
+    const cmCity = document.getElementById("cm-city");
+    if (cmCity) {
+      const current = cmCity.value;
+      cmCity.innerHTML = cityOptions;
+      if (current) cmCity.value = current;
+    }
+
     const select = document.getElementById("filter-city");
     if (!select) return;
     const cities = getCityOptions();
@@ -608,8 +1107,25 @@ const MatesApp = (() => {
           return false;
         }
       }
+      // Filtres rapides (pilules)
+      const av = mate.availability || {};
+      const today = dayName(new Date());
+      const tomorrow = dayName(addDays(new Date(), 1));
+      if (state.matesWhen === "tonight" && !(isMateLive(mate) || (av[today] || []).includes("soir"))) return false;
+      if (state.matesWhen === "tomorrow" && !(av[tomorrow] || []).length) return false;
+      if (state.matesWhen === "weekend" && !((av["Samedi"] || []).length || (av["Dimanche"] || []).length)) return false;
+      if (state.matesWhen === "live" && !isMateLive(mate)) return false;
       return true;
     });
+
+    // Les joueurs « dispo ce soir » apparaissent en premier
+    filtered.sort((a, b) => Number(isMateLive(b)) - Number(isMateLive(a)));
+
+    document.querySelectorAll("#mates-quick-pills .pill").forEach(p => {
+      p.classList.toggle("active", p.dataset.when === state.matesWhen);
+      p.setAttribute("aria-pressed", p.dataset.when === state.matesWhen ? "true" : "false");
+    });
+    if (state.currentRoute === "mates") updateMatesTitle();
 
     if (countBadge) {
       countBadge.textContent = filtered.length;
@@ -620,6 +1136,19 @@ const MatesApp = (() => {
     if (filtered.length === 0) {
       container.innerHTML = "";
       if (emptyState) emptyState.classList.remove("hidden");
+      const emptyText = document.getElementById("mates-empty-text");
+      if (emptyText) {
+        const parts = [];
+        if (state.filters.sport !== "all") parts.push(sportMeta(state.filters.sport).name);
+        if (state.filters.city !== "all") parts.push(`à ${state.filters.city}`);
+        if (state.matesWhen === "tonight") parts.push("ce soir");
+        if (state.matesWhen === "tomorrow") parts.push("demain");
+        if (state.matesWhen === "weekend") parts.push("ce week-end");
+        emptyText.textContent = parts.length
+          ? `Personne pour ${parts.join(" ")} pour l'instant. Publie une alerte : on te prévient dès qu'un mate correspond.`
+          : "Personne ne correspond encore à ces critères.";
+      }
+      lucide.createIcons();
       return;
     }
 
@@ -635,14 +1164,15 @@ const MatesApp = (() => {
         </span>
       `).join("");
 
+      const live = isMateLive(mate);
       return `
-        <div class="bg-mates-card border border-mates-border hover:border-mates-green/60 rounded-3xl p-6 flex flex-col justify-between transition-all hover:-translate-y-1 hover:shadow-xl group">
+        <div class="bg-mates-card border ${live ? "border-mates-green/50" : "border-mates-border"} hover:border-mates-green/60 rounded-3xl p-6 flex flex-col justify-between transition-all hover:-translate-y-1 hover:shadow-xl group relative">
+          ${live ? `<span class="absolute top-4 right-4 badge-spots inline-flex items-center gap-1"><i data-lucide="zap" class="w-3 h-3"></i>Dispo ce soir</span>` : ""}
           <div>
             <!-- En-tête de la carte : photo, prénom/âge, ville -->
             <div class="flex items-center gap-4 mb-4">
               <a href="#mate/${mate.id}" class="relative flex-shrink-0">
-                <img src="${mate.avatar}" alt="${mate.firstName}" class="w-16 h-16 rounded-full object-cover ring-2 ring-mates-border group-hover:ring-mates-green transition-all">
-                <span class="absolute bottom-0 right-0 w-4 h-4 bg-mates-green rounded-full border-2 border-mates-card" title="Disponible pour jouer"></span>
+                <img src="${mate.avatar}" alt="${mate.firstName}" loading="lazy" class="w-16 h-16 rounded-full object-cover ring-2 ring-mates-border group-hover:ring-mates-green transition-all ${live ? "live-halo" : ""}">
               </a>
               <div class="overflow-hidden">
                 <a href="#mate/${mate.id}" class="text-lg font-bold text-white group-hover:text-mates-green transition-colors flex items-center gap-1.5">
@@ -655,6 +1185,9 @@ const MatesApp = (() => {
                 </div>
               </div>
             </div>
+
+            <!-- Indicateurs de confiance -->
+            <div class="flex flex-wrap gap-1.5 mb-3">${trustChipsHtml(mate)}</div>
 
             <!-- Bio -->
             <p class="text-xs text-slate-300 leading-relaxed mb-4 line-clamp-2">
@@ -688,7 +1221,57 @@ const MatesApp = (() => {
     lucide.createIcons();
   }
 
+  function setMatesWhen(when) {
+    state.matesWhen = state.matesWhen === when ? null : when;
+    renderMatesGrid();
+  }
+
+  function heroSearch(event) {
+    if (event) event.preventDefault();
+    const sport = document.getElementById("hero-sport");
+    const city = document.getElementById("hero-city");
+    state.filters.sport = sport ? sport.value : "all";
+    state.filters.city = city ? city.value : "all";
+    state.filters.level = "all";
+    const fs = document.getElementById("filter-sport");
+    const fc = document.getElementById("filter-city");
+    const fl = document.getElementById("filter-level");
+    if (fs) fs.value = state.filters.sport;
+    if (fc) fc.value = state.filters.city;
+    if (fl) fl.value = "all";
+    if (window.location.hash === "#mates") handleHashChange();
+    else window.location.hash = "#mates";
+  }
+
+  function toggleLevelHelp(event) {
+    if (event) event.stopPropagation();
+    const panel = document.getElementById("level-help-panel");
+    const btn = document.getElementById("level-help-btn");
+    if (!panel) return;
+    const willOpen = panel.classList.contains("hidden");
+    panel.classList.toggle("hidden", !willOpen);
+    if (btn) btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  }
+
+  function createSearchAlert() {
+    if (!requireAuth("Connecte-toi pour publier une alerte.")) return;
+    const alerts = readStore(STORAGE_KEY_ALERTS, []);
+    const alert = {
+      sport: state.filters.sport,
+      city: state.filters.city,
+      level: state.filters.level,
+      when: state.matesWhen,
+      createdAt: new Date().toISOString()
+    };
+    alerts.push(alert);
+    writeStore(STORAGE_KEY_ALERTS, alerts.slice(-20));
+    const what = state.filters.sport !== "all" ? sportMeta(state.filters.sport).name : "sport";
+    const where = state.filters.city !== "all" ? ` à ${state.filters.city}` : "";
+    showToast(`Alerte publiée ! On te prévient dès qu'un mate ${what}${where} est dispo.`, "success");
+  }
+
   function resetFilters() {
+    state.matesWhen = null;
     state.filters = { sport: "all", level: "all", city: "all" };
     const s = document.getElementById("filter-sport");
     const l = document.getElementById("filter-level");
@@ -753,7 +1336,7 @@ const MatesApp = (() => {
      ========================================================================== */
   function renderSingleSportPage(sportId) {
     const sport = INITIAL_SPORTS.find(s => s.id === sportId) || INITIAL_SPORTS[0];
-    
+
     // Bandeau : icône, nom, slogan, bouton « Filtrer les mates » (Wireframe 4)
     const heroBanner = document.getElementById("sport-hero-banner");
     if (heroBanner) {
@@ -778,9 +1361,9 @@ const MatesApp = (() => {
               <i data-lucide="users" class="w-4 h-4"></i>
               <span>Filtrer les mates</span>
             </button>
-            <button onclick="MatesApp.openBookingModal('${sport.name}')" class="btn-outline-neon text-sm py-3 px-5">
+            <button onclick="MatesApp.openBookingModal('${sport.id}')" class="btn-outline-neon text-sm py-3 px-5">
               <i data-lucide="calendar" class="w-4 h-4"></i>
-              <span>Réserver un terrain</span>
+              <span>Voir les matchs</span>
             </button>
           </div>
         </div>
@@ -841,7 +1424,7 @@ const MatesApp = (() => {
                   </a>
                   <div>
                     <a href="#mate/${mate.id}" class="font-bold text-white hover:text-mates-green transition-colors">
-                      ${mate.firstName}, ${mate.age} ans
+                      ${mate.firstName}${mate.age ? `, ${mate.age} ans` : ""}
                     </a>
                     <div class="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                       <i data-lucide="map-pin" class="w-3 h-3 text-mates-green"></i>
@@ -855,7 +1438,7 @@ const MatesApp = (() => {
                   <span class="font-bold text-mates-green">${sportInfo ? sportInfo.level : 'Intermédiaire'}</span>
                 </div>
 
-                <p class="text-xs text-slate-300 line-clamp-2 mb-4">"${mate.bio}"</p>
+                <p class="text-xs text-slate-300 line-clamp-2 mb-4">${mate.bio ? `"${mate.bio}"` : "Nouveau sur Mates !"}</p>
               </div>
 
               <div class="pt-3 border-t border-mates-border flex gap-2">
@@ -883,7 +1466,7 @@ const MatesApp = (() => {
           <p class="text-xs text-slate-400">Courts intérieurs chauffés et terrains extérieurs panoramiques.</p>
           <div class="pt-2 flex justify-between items-center text-xs">
             <span class="text-slate-300 font-bold">À partir de 9 € / pers.</span>
-            <button onclick="MatesApp.openBookingModal('${sport.name}')" class="btn-neon text-[11px] py-1.5 px-3">Réserver</button>
+            <button onclick="MatesApp.openCreateMatchModal('${sport.id}')" class="btn-neon text-[11px] py-1.5 px-3">Organiser</button>
           </div>
         </div>
 
@@ -898,7 +1481,7 @@ const MatesApp = (() => {
           <p class="text-xs text-slate-400">Infrastructures modernes de dernière génération avec vestiaires et club-house.</p>
           <div class="pt-2 flex justify-between items-center text-xs">
             <span class="text-slate-300 font-bold">À partir de 8 € / pers.</span>
-            <button onclick="MatesApp.openBookingModal('${sport.name}')" class="btn-neon text-[11px] py-1.5 px-3">Réserver</button>
+            <button onclick="MatesApp.openCreateMatchModal('${sport.id}')" class="btn-neon text-[11px] py-1.5 px-3">Organiser</button>
           </div>
         </div>
 
@@ -913,7 +1496,7 @@ const MatesApp = (() => {
           <p class="text-xs text-slate-400">Accessible aux étudiants HELMo et grand public. Réductions membres.</p>
           <div class="pt-2 flex justify-between items-center text-xs">
             <span class="text-slate-300 font-bold">À partir de 6 € / pers.</span>
-            <button onclick="MatesApp.openBookingModal('${sport.name}')" class="btn-neon text-[11px] py-1.5 px-3">Réserver</button>
+            <button onclick="MatesApp.openCreateMatchModal('${sport.id}')" class="btn-neon text-[11px] py-1.5 px-3">Organiser</button>
           </div>
         </div>
       `;
@@ -945,6 +1528,14 @@ const MatesApp = (() => {
     }
 
     state.selectedMateId = mate.id;
+    setTitle(mate.id === "my-profile" ? "Mon profil public" : `Profil de ${mate.firstName}`);
+    const live = isMateLive(mate);
+
+    // Progression & badges
+    const progressEl = document.getElementById("public-progress");
+    if (progressEl) progressEl.innerHTML = progressHtml(mate);
+    const badgesEl = document.getElementById("public-badges");
+    if (badgesEl) badgesEl.innerHTML = badgesHtml(mate);
 
     // CARTE IDENTITÉ : photo, nom, âge, ville, bio (Wireframe 5)
     const identityCard = document.getElementById("public-identity-card");
@@ -952,9 +1543,9 @@ const MatesApp = (() => {
       identityCard.innerHTML = `
         <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6">
           <div class="relative flex-shrink-0">
-            <img src="${mate.avatar}" alt="${mate.firstName}" class="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl object-cover ring-4 ring-mates-border shadow-2xl">
-            <span class="absolute -bottom-2 -right-2 px-3 py-1 bg-mates-green text-black font-extrabold text-xs rounded-full shadow-lg">
-              ${mate.isNew ? "Nouveau" : `${mate.reliability || '100%'} Fiable`}
+            <img src="${mate.avatar}" alt="${mate.firstName}" class="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl object-cover ring-4 ring-mates-border shadow-2xl ${live ? "live-halo" : ""}">
+            <span class="absolute -bottom-2 -right-2 px-3 py-1 bg-mates-green text-mates-dark font-extrabold text-xs rounded-full shadow-lg">
+              ${live ? "⚡ Dispo ce soir" : mate.isNew ? "Nouveau" : `${mate.reliability || '100%'} Fiable`}
             </span>
           </div>
 
@@ -993,6 +1584,12 @@ const MatesApp = (() => {
           </div>
         </div>
       `;
+    }
+
+    const topProposeBtn = document.getElementById("propose-match-top-btn");
+    if (topProposeBtn) {
+      topProposeBtn.classList.toggle("hidden", mate.id === "my-profile");
+      topProposeBtn.onclick = () => openProposeMatchModal(mate.id);
     }
 
     // CARTE SPORTS : liste des sports avec le niveau (Wireframe 5)
@@ -1291,7 +1888,7 @@ const MatesApp = (() => {
       state.userProfile.email = email;
       populateCityDropdown();
       renderHeaderUserSection();
-      showToast("Profil enregistré avec succès !", "success");
+      showToast("Profil enregistré ! Les autres mates voient déjà tes changements.", "success");
       setTimeout(() => { window.location.hash = "#mate/my-profile"; }, 800);
       return;
     }
@@ -1314,6 +1911,8 @@ const MatesApp = (() => {
   }
 
   async function logout() {
+    state.liveUntil = 0;
+    writeStore(STORAGE_KEY_LIVE, 0);
     if (SB) {
       await SB.auth.signOut();
       state.userProfile = null;
@@ -1514,112 +2113,337 @@ const MatesApp = (() => {
   }
 
   /* ==========================================================================
-     MATCHS OUVERTS & MODALES (Expérience Playtomic)
+     MATCHS OUVERTS : liste, fiche détaillée, chat, partage, création
      ========================================================================== */
+  function filterMatchesByWhen(list) {
+    const when = state.matchesWhen;
+    return list.filter(m => {
+      const start = new Date(m.startsAt);
+      if (start.getTime() + (m.durationMin || 60) * 60000 < Date.now()) return false;
+      if (when === "tonight") return isTonight(start);
+      if (when === "tomorrow") return isTomorrow(start);
+      if (when === "weekend") return isThisWeekend(start);
+      if (when === "free") return !m.price;
+      return true;
+    });
+  }
+
+  function setMatchesWhen(when) {
+    state.matchesWhen = when && state.matchesWhen !== when ? when : null;
+    renderOpenMatches();
+  }
+
+  function playersAvatarsHtml(match, size = "w-8 h-8") {
+    const players = matchPlayers(match);
+    const shown = players.slice(0, 6);
+    const extra = players.length - shown.length;
+    return shown.map(p => `
+        <div class="${size} rounded-full bg-slate-700 border-2 ${p.me ? "border-mates-green" : "border-mates-card"} -ml-2 first:ml-0 flex items-center justify-center text-[10px] font-bold text-white overflow-hidden" title="${escapeHtml(p.name)}">
+          ${p.avatar ? `<img src="${p.avatar}" alt="" loading="lazy" class="w-full h-full object-cover">` : escapeHtml(p.name.substring(0, 2))}
+        </div>`).join("") +
+      (extra > 0 ? `<div class="${size} rounded-full bg-mates-off border-2 border-mates-card -ml-2 flex items-center justify-center text-[10px] font-bold text-slate-300">+${extra}</div>` : "");
+  }
+
+  function amenitiesIconsHtml(match) {
+    return (match.amenities || []).map(a => AMENITIES[a]).filter(Boolean).map(a => `
+      <span class="w-7 h-7 rounded-lg bg-mates-off border border-slate-800 flex items-center justify-center" title="${a.label}">
+        <i data-lucide="${a.icon}" class="w-3.5 h-3.5 text-slate-300"></i>
+        <span class="sr-only">${a.label}</span>
+      </span>`).join("");
+  }
+
   function renderOpenMatches() {
     const container = document.getElementById("open-matches-list");
     if (!container) return;
 
-    container.innerHTML = state.matches.map(m => {
-      const remaining = m.totalSlots - m.bookedSlots;
-      const badgeColor = remaining === 1 ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+    document.querySelectorAll("#matches-quick-pills .pill").forEach(p => {
+      p.classList.toggle("active", p.dataset.when === state.matchesWhen);
+      p.setAttribute("aria-pressed", p.dataset.when === state.matchesWhen ? "true" : "false");
+    });
 
+    const list = filterMatchesByWhen(state.matches);
+    const empty = document.getElementById("matches-empty-state");
+    if (empty) empty.classList.toggle("hidden", list.length > 0);
+
+    container.innerHTML = list.map(m => {
+      const sport = sportMeta(m.sportId);
+      const joined = isJoined(m);
+      const full = remainingSlots(m) === 0;
+      const start = new Date(m.startsAt);
       return `
-        <div class="bg-mates-card border border-mates-border rounded-3xl p-6 flex flex-col justify-between hover:border-mates-green/60 transition-all hover:shadow-xl">
+        <article class="bg-mates-card border ${joined ? "border-mates-green/60" : "border-mates-border"} rounded-3xl p-6 flex flex-col justify-between hover:border-mates-green/60 transition-all hover:shadow-xl cursor-pointer" onclick="MatesApp.openMatchDetail('${m.id}')">
           <div class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2.5">
-                <span class="text-3xl">${m.sportIcon}</span>
-                <div>
-                  <h4 class="font-bold text-white text-base">${m.clubName}</h4>
-                  <div class="text-xs text-slate-400">${m.courtName}</div>
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <span class="text-3xl">${sport.icon}</span>
+                <div class="min-w-0">
+                  <div class="text-[11px] font-bold text-mates-green uppercase tracking-wider">${sport.name} • ${escapeHtml(m.city)}</div>
+                  <h3 class="font-bold text-white text-base truncate">${escapeHtml(m.title)}</h3>
+                  <div class="text-xs text-slate-400 truncate">${escapeHtml(m.clubName)}</div>
                 </div>
               </div>
-              <span class="px-2.5 py-1 rounded-full text-xs font-bold border ${badgeColor}">
-                Reste ${remaining} place${remaining > 1 ? 's' : ''}
-              </span>
+              ${spotsBadgeHtml(m)}
             </div>
 
-            <div class="p-3.5 bg-mates-cardElevated rounded-2xl border border-mates-border space-y-2 text-xs">
-              <div class="flex justify-between text-slate-300">
-                <span>Date & Heure :</span>
-                <strong class="text-white">${m.date} • ${m.time}</strong>
+            <div class="p-3.5 bg-mates-off rounded-2xl border border-slate-800 space-y-2 text-xs">
+              <div class="flex justify-between gap-2 text-slate-300">
+                <span class="flex items-center gap-1.5"><i data-lucide="calendar" class="w-3.5 h-3.5 text-mates-green"></i>${formatMatchDay(start)} • ${formatHour(start)}</span>
+                ${weatherChipHtml(m)}
               </div>
-              <div class="flex justify-between text-slate-300">
-                <span>Niveau attendu :</span>
-                <strong class="text-mates-green">${m.levelRequired}</strong>
+              <div class="flex justify-between gap-2 text-slate-300">
+                <span>Niveau</span>
+                <strong class="text-white text-right">${escapeHtml(m.levelRequired)}</strong>
               </div>
-              <div class="flex justify-between text-slate-300">
-                <span>Prix :</span>
-                <strong class="text-white">${m.pricePerPerson}</strong>
+              <div class="flex justify-between gap-2 text-slate-300">
+                <span>Prix</span>
+                <span class="text-right"><strong class="text-white">${priceLabel(m)}</strong><span class="block text-[11px] text-slate-500">${escapeHtml(m.payment)}</span></span>
               </div>
             </div>
 
-            <div>
-              <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Joueurs (${m.bookedSlots}/${m.totalSlots}) :</div>
-              <div class="flex items-center gap-2">
-                ${m.players.map(p => `
-                  <div class="w-8 h-8 rounded-full bg-slate-700 border border-mates-green flex items-center justify-center text-[10px] font-bold text-white overflow-hidden" title="${p.name}">
-                    ${p.avatar ? `<img src="${p.avatar}" class="w-full h-full object-cover">` : p.name.substring(0, 2)}
-                  </div>
-                `).join("")}
-                ${Array(remaining).fill(0).map(() => `
-                  <div class="w-8 h-8 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center text-xs text-slate-500 font-bold">
-                    +
-                  </div>
-                `).join("")}
-              </div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              ${statusBadgeHtml(m)}
+              <div class="flex items-center gap-1">${amenitiesIconsHtml(m)}</div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div class="flex items-center pl-2">${playersAvatarsHtml(m)}</div>
+              <span class="text-[11px] text-slate-400 font-semibold">${matchPlayers(m).length}/${m.totalSlots} joueurs</span>
             </div>
           </div>
 
-          <div class="pt-5 border-t border-mates-border mt-4">
-            <button onclick="MatesApp.openJoinModal('${m.id}')" class="w-full btn-neon py-2.5 text-xs">
-              <span>Rejoindre le match</span>
-              <i data-lucide="check" class="w-4 h-4"></i>
+          <div class="pt-5 border-t border-mates-border mt-4 flex gap-2">
+            ${joined
+              ? `<button onclick="event.stopPropagation(); MatesApp.openMatchDetail('${m.id}')" class="flex-1 btn-outline-neon py-2.5 text-xs"><i data-lucide="check" class="w-4 h-4"></i><span>${m.mine ? "Ton match" : "Inscrit"} · Détails</span></button>`
+              : `<button onclick="event.stopPropagation(); MatesApp.joinMatch('${m.id}')" class="flex-1 btn-neon py-2.5 text-xs" ${full ? "disabled" : ""}><span>${full ? "Complet" : "Rejoindre"}</span>${full ? "" : `<i data-lucide="arrow-right" class="w-4 h-4"></i>`}</button>`}
+            <button onclick="event.stopPropagation(); MatesApp.shareMatch('${m.id}', 'whatsapp')" title="Partager sur WhatsApp" aria-label="Partager sur WhatsApp" class="w-11 rounded-xl border border-mates-border hover:border-mates-green text-slate-300 hover:text-mates-green flex items-center justify-center">
+              <i data-lucide="share-2" class="w-4 h-4"></i>
             </button>
           </div>
-        </div>
+        </article>
       `;
     }).join("");
 
     lucide.createIcons();
+    loadWeather();
   }
 
-  function openJoinModal(matchId) {
-    if (!requireAuth("Connecte-toi pour rejoindre un match.")) return;
-    const match = state.matches.find(m => m.id === matchId) || state.matches[0];
-    state.pendingJoinMatchId = match.id;
-
-    const modal = document.getElementById("join-match-modal");
-    const title = document.getElementById("modal-match-title");
-    const details = document.getElementById("modal-match-details");
-    const time = document.getElementById("modal-match-time");
-    const price = document.getElementById("modal-match-price");
-
-    if (title) title.textContent = `Match de ${match.sportName} • ${match.clubName}`;
-    if (details) details.textContent = `${match.courtName} • Niveau ${match.levelRequired}`;
-    if (time) time.textContent = `${match.date} • ${match.time}`;
-    if (price) price.textContent = match.pricePerPerson;
-
+  function openMatchDetail(matchId, fromRoute) {
+    const match = getMatch(matchId);
+    if (!match) return;
+    state.openMatchId = match.id;
+    renderMatchDetail(match.id);
+    const modal = document.getElementById("match-detail-modal");
     if (modal) modal.classList.remove("hidden");
-    lucide.createIcons();
+    setTitle(`${sportMeta(match.sportId).name} à ${match.city}`);
+    // URL partageable (#match/xxx) sans recharger la page
+    if (!fromRoute && window.location.hash !== `#match/${match.id}`) {
+      history.replaceState(null, "", `#match/${match.id}`);
+      state.currentRoute = "match";
+    }
+    loadWeather();
   }
 
-  function confirmJoinMatch() {
-    const match = state.matches.find(m => m.id === state.pendingJoinMatchId);
-    if (match) {
-      if (match.bookedSlots < match.totalSlots) {
-        match.bookedSlots += 1;
-        match.players.push({
-          name: state.userProfile ? state.userProfile.firstName : "Moi",
-          avatar: state.userProfile ? state.userProfile.avatar : null
-        });
-        localStorage.setItem(STORAGE_KEY_MATCHES, JSON.stringify(state.matches));
-        renderOpenMatches();
-      }
+  function renderMatchDetail(matchId) {
+    const body = document.getElementById("match-detail-body");
+    const match = getMatch(matchId);
+    if (!body || !match) return;
+    const sport = sportMeta(match.sportId);
+    const start = new Date(match.startsAt);
+    const end = new Date(start.getTime() + (match.durationMin || 60) * 60000);
+    const joined = isJoined(match);
+    const remaining = remainingSlots(match);
+    const links = mapsLinks(match);
+    const weather = weatherFor(match);
+    const players = matchPlayers(match);
+    const chat = matchChat(match);
+
+    body.innerHTML = `
+      <div class="flex items-start gap-4 pr-10">
+        <span class="text-5xl">${sport.icon}</span>
+        <div class="min-w-0">
+          <div class="text-xs font-bold text-mates-green uppercase tracking-wider">${sport.name} • ${escapeHtml(match.city)}</div>
+          <h3 class="font-display text-3xl sm:text-4xl text-white">${escapeHtml(match.title)}</h3>
+          <div class="flex flex-wrap gap-2 mt-2">${statusBadgeHtml(match)} ${spotsBadgeHtml(match)}</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        <div class="p-4 rounded-2xl bg-mates-off border border-slate-800 space-y-1">
+          <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Quand</div>
+          <div class="text-white font-bold">${formatMatchDay(start)}</div>
+          <div class="text-slate-300">${formatHour(start)} – ${formatHour(end)} (${match.durationMin} min)</div>
+          ${weather ? `<div class="flex items-center gap-1.5 text-slate-300 pt-1"><i data-lucide="${weather.icon}" class="w-4 h-4 text-mates-green"></i>${weather.temp}°C • ${weather.label}</div>` : match.outdoor ? `<div class="text-[11px] text-slate-500 pt-1">Terrain extérieur</div>` : `<div class="text-[11px] text-slate-500 pt-1">Terrain intérieur</div>`}
+        </div>
+        <div class="p-4 rounded-2xl bg-mates-off border border-slate-800 space-y-1">
+          <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Où</div>
+          <div class="text-white font-bold">${escapeHtml(match.clubName)}</div>
+          <div class="text-slate-300">${escapeHtml(match.courtName || "")}${match.courtName ? " · " : ""}${escapeHtml(match.city)}</div>
+          <div class="flex gap-3 pt-1 text-xs font-semibold">
+            <a href="${links.google}" target="_blank" rel="noopener" class="text-mates-green hover:underline inline-flex items-center gap-1"><i data-lucide="map" class="w-3.5 h-3.5"></i>Google Maps</a>
+            <a href="${links.waze}" target="_blank" rel="noopener" class="text-mates-green hover:underline inline-flex items-center gap-1"><i data-lucide="navigation" class="w-3.5 h-3.5"></i>Waze</a>
+          </div>
+        </div>
+        <div class="p-4 rounded-2xl bg-mates-off border border-slate-800 space-y-1">
+          <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Prix & paiement</div>
+          <div class="text-white font-bold">${priceLabel(match)}</div>
+          <div class="text-slate-300 text-xs">${escapeHtml(match.payment)}</div>
+        </div>
+        <div class="p-4 rounded-2xl bg-mates-off border border-slate-800 space-y-1">
+          <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Niveau attendu</div>
+          <div class="text-white font-bold">${escapeHtml(match.levelRequired)}</div>
+          <div class="text-slate-300 text-xs">${match.courtBooked ? "Le terrain est déjà payé et bloqué." : "Le terrain sera réservé quand l'équipe sera complète."}</div>
+        </div>
+      </div>
+
+      ${(match.amenities || []).length ? `
+      <div>
+        <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-2">Sur place</div>
+        <div class="flex flex-wrap gap-2">
+          ${match.amenities.map(a => AMENITIES[a]).filter(Boolean).map(a => `<span class="trust-chip"><i data-lucide="${a.icon}" class="w-3.5 h-3.5 text-mates-green"></i>${a.label}</span>`).join("")}
+        </div>
+      </div>` : ""}
+
+      <div>
+        <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-2">Joueurs (${players.length}/${match.totalSlots})</div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          ${players.map(p => `
+            <${p.mateId ? `a href="#mate/${p.mateId}"` : "div"} class="flex items-center gap-2 p-2 rounded-xl bg-mates-off border ${p.me ? "border-mates-green/60" : "border-slate-800"} hover:border-mates-green/60 min-w-0">
+              ${p.avatar ? `<img src="${p.avatar}" alt="" loading="lazy" class="w-8 h-8 rounded-full object-cover flex-shrink-0">` : `<span class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">${escapeHtml(p.name.substring(0, 2))}</span>`}
+              <span class="text-xs font-semibold text-white truncate">${escapeHtml(p.me ? "Toi" : p.name)}</span>
+            </${p.mateId ? "a" : "div"}>`).join("")}
+          ${Array(remaining).fill(0).map(() => `
+            <div class="flex items-center gap-2 p-2 rounded-xl border-2 border-dashed border-mates-green/40 text-mates-green">
+              <span class="w-8 h-8 rounded-full bg-mates-green/10 flex items-center justify-center font-bold">+</span>
+              <span class="text-xs font-semibold">Place libre</span>
+            </div>`).join("")}
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-mates-border overflow-hidden">
+        <div class="px-4 py-3 bg-mates-off border-b border-mates-border flex items-center justify-between">
+          <div class="text-sm font-bold text-white flex items-center gap-2"><i data-lucide="messages-square" class="w-4 h-4 text-mates-green"></i>Discussion du match</div>
+          <span class="text-[11px] text-slate-500">${chat.length} message${chat.length > 1 ? "s" : ""}</span>
+        </div>
+        <div id="match-chat-list" class="p-4 space-y-3 max-h-56 overflow-y-auto">
+          ${chat.length ? chat.map(c => `
+            <div class="flex items-end gap-2 ${c.mine ? "flex-row-reverse" : ""}">
+              ${c.avatar ? `<img src="${c.avatar}" alt="" class="w-7 h-7 rounded-full object-cover flex-shrink-0">` : ""}
+              <div class="chat-bubble ${c.mine ? "mine" : ""}">
+                <div class="text-[11px] font-bold ${c.mine ? "text-mates-green" : "text-slate-300"}">${escapeHtml(c.mine ? "Toi" : c.author)} <span class="font-normal text-slate-500">· ${formatAgo(c.at)}</span></div>
+                <div class="text-slate-100">${escapeHtml(c.text)}</div>
+              </div>
+            </div>`).join("") : `<p class="text-xs text-slate-500 text-center py-3">Aucun message. Lance la discussion : qui ramène les balles ?</p>`}
+        </div>
+        <form onsubmit="MatesApp.sendChatMessage(event, '${match.id}')" class="flex gap-2 p-3 border-t border-mates-border bg-mates-off">
+          <label for="match-chat-input" class="sr-only">Message</label>
+          <input id="match-chat-input" maxlength="280" autocomplete="off" placeholder="${joined ? "Écris aux autres joueurs…" : "Rejoins le match pour discuter"}" class="flex-1 min-w-0 bg-mates-card border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green">
+          <button type="submit" class="btn-neon px-4 py-2.5" aria-label="Envoyer"><i data-lucide="send" class="w-4 h-4"></i></button>
+        </form>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-2">
+        <button onclick="MatesApp.shareMatch('${match.id}', 'copy')" class="flex-1 btn-outline-neon py-2.5 text-sm"><i data-lucide="link" class="w-4 h-4"></i><span>Copier le lien du match</span></button>
+        <button onclick="MatesApp.shareMatch('${match.id}', 'whatsapp')" class="flex-1 btn-outline-neon py-2.5 text-sm"><i data-lucide="message-circle" class="w-4 h-4"></i><span>Partager sur WhatsApp</span></button>
+      </div>
+
+      <div class="pt-2 border-t border-mates-border">
+        ${match.mine
+          ? `<div class="text-center text-sm text-slate-300 py-2">Tu organises ce match. Partage le lien pour le compléter plus vite !</div>`
+          : joined
+            ? `<button onclick="MatesApp.leaveMatch('${match.id}')" class="w-full py-3 rounded-xl border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 font-semibold text-sm">Se désinscrire du match</button>`
+            : `<button onclick="MatesApp.joinMatch('${match.id}')" class="w-full btn-neon py-3 text-base" ${remaining === 0 ? "disabled" : ""}>${remaining === 0 ? "Match complet" : `Rejoindre la partie · ${priceLabel(match)}`}</button>`}
+      </div>
+    `;
+    lucide.createIcons();
+    const chatList = document.getElementById("match-chat-list");
+    if (chatList) chatList.scrollTop = chatList.scrollHeight;
+  }
+
+  // Compatibilité : anciens boutons « Rejoindre » (carte de l'accueil)
+  function openJoinModal(matchId) {
+    openMatchDetail(matchId);
+  }
+
+  function joinMatch(matchId) {
+    const match = getMatch(matchId);
+    if (!match) return;
+    if (!requireAuth("Connecte-toi pour rejoindre un match.")) return;
+    if (isJoined(match)) {
+      openMatchDetail(match.id);
+      return;
     }
-    closeModals();
-    showToast("Votre place est réservée ! À vos baskets.", "success");
+    if (remainingSlots(match) === 0) {
+      showToast("Ce match est complet. Active une alerte pour ne pas rater le prochain !", "warning");
+      return;
+    }
+    state.matchState.joined[match.id] = new Date().toISOString();
+    saveMatchState();
+    renderOpenMatches();
+    if (state.openMatchId === match.id) renderMatchDetail(match.id);
+    const start = new Date(match.startsAt);
+    showToast(`C'est validé ! Ta place est réservée : ${sportMeta(match.sportId).name}, ${formatMatchDay(start).toLowerCase()} à ${formatHour(start)}. Les autres joueurs sont prévenus.`, "success");
+  }
+
+  function leaveMatch(matchId) {
+    const match = getMatch(matchId);
+    if (!match) return;
+    delete state.matchState.joined[match.id];
+    saveMatchState();
+    renderOpenMatches();
+    renderMatchDetail(match.id);
+    if (state.currentRoute === "dashboard") renderDashboard();
+    showToast("Tu t'es désinscrit. Ta place est de nouveau libre pour un autre mate.", "info");
+  }
+
+  function sendChatMessage(event, matchId) {
+    if (event) event.preventDefault();
+    const match = getMatch(matchId);
+    const input = document.getElementById("match-chat-input");
+    if (!match || !input) return;
+    const text = input.value.trim().slice(0, 280);
+    if (!text) return;
+    if (!requireAuth("Connecte-toi pour écrire aux joueurs.")) return;
+    if (!isJoined(match)) {
+      showToast("Rejoins d'abord le match pour discuter avec les joueurs.", "info");
+      return;
+    }
+    const me = myPlayerEntry();
+    if (!state.matchState.chat[match.id]) state.matchState.chat[match.id] = [];
+    state.matchState.chat[match.id].push({ author: me.name, avatar: me.avatar, text, at: new Date().toISOString(), mine: true });
+    state.matchState.chat[match.id] = state.matchState.chat[match.id].slice(-50);
+    saveMatchState();
+    renderMatchDetail(match.id);
+    const again = document.getElementById("match-chat-input");
+    if (again) again.focus();
+  }
+
+  async function shareMatch(matchId, mode) {
+    const match = getMatch(matchId);
+    if (!match) return;
+    const start = new Date(match.startsAt);
+    const remaining = remainingSlots(match);
+    const url = matchShareUrl(match);
+    const text = `${sportMeta(match.sportId).icon} ${match.title} – ${formatMatchDay(start)} à ${formatHour(start)}, ${match.clubName} (${match.city}). ` +
+      (remaining > 0 ? `Il manque ${remaining} joueur${remaining > 1 ? "s" : ""} ! ` : "") + `Rejoins-nous sur Mates : ${url}`;
+
+    if (mode === "whatsapp") {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch (e) {
+      const tmp = document.createElement("textarea");
+      tmp.value = url;
+      tmp.setAttribute("readonly", "");
+      tmp.style.position = "fixed";
+      tmp.style.opacity = "0";
+      document.body.appendChild(tmp);
+      tmp.select();
+      try { document.execCommand("copy"); } catch (err) { /* ignore */ }
+      tmp.remove();
+    }
+    showToast("Lien du match copié ! Colle-le dans ton groupe pour trouver le dernier joueur.", "success");
   }
 
   function openProposeMatchModal(mateId) {
@@ -1638,7 +2462,7 @@ const MatesApp = (() => {
     if (sportSelect) {
       const sportsForMatch = mate.sports.length ? mate.sports : INITIAL_SPORTS.map(sp => ({ id: sp.id, name: sp.name, level: "Tous niveaux" }));
       sportSelect.innerHTML = sportsForMatch.map(s => {
-        const meta = INITIAL_SPORTS.find(sp => sp.id === s.id) || { icon: "🏅" };
+        const meta = sportMeta(s.id);
         return `<option value="${s.id}">${meta.icon} ${s.name} (${s.level})</option>`;
       }).join("");
     }
@@ -1648,48 +2472,269 @@ const MatesApp = (() => {
   }
 
   function sendMatchInvitation() {
+    const mate = getAllMates().find(m => m.id === state.pendingProposeMateId);
     closeModals();
-    showToast("Invitation envoyée au mate avec succès !", "success");
+    showToast(`Demande envoyée à ${mate ? mate.firstName : "ce mate"} ! Tu recevras une notification dès sa réponse.`, "success");
   }
 
-  function openBookingModal(sportName) {
-    showToast(`Ouverture des créneaux disponibles pour ${sportName}...`, "info");
-    setTimeout(() => {
-      window.location.hash = "#matches";
-    }, 400);
+  function openBookingModal(sportId) {
+    const sport = sportMeta(sportId);
+    const hasMatch = state.matches.some(m => m.sportId === sport.id);
+    window.location.hash = "#matches";
+    if (!hasMatch) {
+      setTimeout(() => showToast(`Pas encore de match de ${sport.name}. Crée le premier !`, "info"), 300);
+    }
   }
 
-  function openCreateMatchModal() {
+  function openCreateMatchModal(sportId) {
     if (!requireAuth("Connecte-toi pour organiser un match.")) return;
-    showToast("Fonctionnalité : Création d'un match ouvert", "info");
-    const sport = prompt("Quel sport souhaitez-vous organiser ? (ex: Padel, Football Five, Tennis)", "Padel");
-    if (!sport) return;
-
-    const newMatch = {
-      id: "match-" + (state.matches.length + 1),
-      sportId: sport.toLowerCase(),
-      sportName: sport,
-      sportIcon: "🎾",
-      clubName: "Complexe Liège Centre",
-      courtName: "Court Principal",
-      date: "Ce week-end",
-      time: "18:00 - 19:30",
-      levelRequired: "Tous niveaux",
-      pricePerPerson: "9 €",
-      totalSlots: 4,
-      bookedSlots: 1,
-      host: { name: state.userProfile.firstName, avatar: state.userProfile.avatar },
-      players: [{ name: state.userProfile.firstName, avatar: state.userProfile.avatar }]
-    };
-
-    state.matches.unshift(newMatch);
-    localStorage.setItem(STORAGE_KEY_MATCHES, JSON.stringify(state.matches));
-    renderOpenMatches();
-    showToast("Votre match ouvert a été publié !", "success");
+    populateSportDropdowns();
+    populateCityDropdown();
+    const form = document.getElementById("create-match-form");
+    if (form) form.reset();
+    const sportSel = document.getElementById("cm-sport");
+    if (sportSel && typeof sportId === "string" && sportId) sportSel.value = sportId;
+    const citySel = document.getElementById("cm-city");
+    if (citySel && state.userProfile && state.userProfile.city) {
+      const c = findCityOption(state.userProfile.city);
+      if (c) citySel.value = c;
+    }
+    const date = document.getElementById("cm-date");
+    if (date) {
+      const t = addDays(new Date(), 1);
+      const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      date.min = iso(new Date());
+      date.value = iso(t);
+    }
+    const modal = document.getElementById("create-match-modal");
+    if (modal) modal.classList.remove("hidden");
+    lucide.createIcons();
+    const place = document.getElementById("cm-place");
+    if (place) setTimeout(() => place.focus(), 50);
   }
 
-  function closeModals() {
+  function submitCreateMatch(event) {
+    if (event) event.preventDefault();
+    if (!requireAuth("Connecte-toi pour organiser un match.")) return;
+    const val = id => (document.getElementById(id) || {}).value || "";
+    const sport = sportMeta(val("cm-sport"));
+    const city = findCityOption(val("cm-city")) || "Liège";
+    const place = cleanText(val("cm-place"), 60);
+    const missing = Math.min(21, Math.max(1, parseInt(val("cm-missing"), 10) || 1));
+    const price = Math.min(100, Math.max(0, parseFloat(val("cm-price")) || 0));
+    const [h, m] = (val("cm-time") || "20:00").split(":").map(Number);
+    const startsAt = new Date(`${val("cm-date")}T00:00:00`);
+    if (!place || isNaN(startsAt.getTime())) {
+      showToast("Indique un lieu et une date valides.", "warning");
+      return;
+    }
+    startsAt.setHours(h || 0, m || 0, 0, 0);
+    if (startsAt.getTime() < Date.now()) {
+      showToast("Choisis une date et une heure à venir.", "warning");
+      return;
+    }
+    const amenities = [...document.querySelectorAll("#cm-amenities input:checked")].map(i => i.value).filter(a => AMENITIES[a]);
+    const me = myPlayerEntry();
+    const match = {
+      id: "match-u-" + Date.now().toString(36),
+      sportId: sport.id,
+      title: `${sport.name} : ${missing} joueur${missing > 1 ? "s" : ""} recherché${missing > 1 ? "s" : ""}`,
+      clubName: place,
+      courtName: "",
+      city,
+      startsAt: startsAt.toISOString(),
+      durationMin: 90,
+      levelRequired: val("cm-level") || "Tous niveaux",
+      price,
+      payment: price > 0 ? "Paiement sur place ou via l'app" : "Gratuit",
+      courtBooked: !!(document.getElementById("cm-booked") || {}).checked,
+      totalSlots: missing + 1,
+      outdoor: OUTDOOR_SPORTS.includes(sport.id),
+      amenities,
+      players: [me],
+      mine: true
+    };
+    state.matchState.created.push(match);
+    state.matchState.created = state.matchState.created.slice(-30);
+    saveMatchState();
+    state.matches = buildMatches();
+    closeModals();
+    state.matchesWhen = null;
+    window.location.hash = `#match/${match.id}`;
+    showToast(`Ton match est publié ! Partage-le pour trouver ${missing > 1 ? `tes ${missing} joueurs` : "ton dernier joueur"} plus vite.`, "success");
+  }
+
+  function closeModals(silent) {
     document.querySelectorAll(".modal-overlay").forEach(m => m.classList.add("hidden"));
+    const wasOpen = state.openMatchId;
+    state.openMatchId = null;
+    // Ferme la fiche match -> on revient sur la liste (#matches)
+    if (!silent && wasOpen && window.location.hash.startsWith("#match/")) {
+      history.replaceState(null, "", "#matches");
+      state.currentRoute = "matches";
+      setTitle("Matchs ouverts");
+    }
+  }
+
+  /* ==========================================================================
+     MON ESPACE (tableau de bord)
+     ========================================================================== */
+  function myUpcomingMatches() {
+    const now = Date.now();
+    return state.matches
+      .filter(m => isJoined(m) && new Date(m.startsAt).getTime() + (m.durationMin || 60) * 60000 > now)
+      .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+  }
+
+  function countdownText(date) {
+    const diff = new Date(date).getTime() - Date.now();
+    if (diff <= 0) return "C'est parti, bon match !";
+    const minutes = Math.floor(diff / 60000);
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes % 1440) / 60);
+    const mins = minutes % 60;
+    if (days > 0) return `${days} j ${hours} h`;
+    if (hours > 0) return `${hours} h ${String(mins).padStart(2, "0")} min`;
+    return `${mins} min`;
+  }
+
+  function renderDashboard() {
+    const p = state.userProfile;
+    if (!p) return;
+    const avatar = document.getElementById("dash-avatar");
+    if (avatar) { avatar.src = p.avatar || DEFAULT_AVATAR; avatar.alt = p.firstName; avatar.classList.toggle("live-halo", isMeLive()); }
+    const fn = document.getElementById("dash-firstname");
+    if (fn) fn.textContent = p.firstName || "toi";
+    syncLiveToggles();
+
+    const upcoming = myUpcomingMatches();
+    const next = upcoming[0];
+
+    // Prochain match
+    const nextEl = document.getElementById("dash-next-match");
+    if (nextEl) {
+      if (!next) {
+        nextEl.innerHTML = `
+          <h2 class="text-2xl text-white flex items-center gap-2 mb-4"><i data-lucide="timer" class="w-5 h-5 text-mates-green"></i>Prochain match</h2>
+          <div class="text-center py-8 space-y-3">
+            <div class="text-4xl">📅</div>
+            <p class="text-sm text-slate-300">Aucun match prévu pour l'instant.</p>
+            <div class="flex flex-wrap justify-center gap-2">
+              <a href="#matches" class="btn-neon text-sm py-2.5 px-5">Trouver un match</a>
+              <button onclick="MatesApp.openCreateMatchModal()" class="btn-outline-neon text-sm py-2.5 px-5">Créer un match</button>
+            </div>
+          </div>`;
+      } else {
+        const sport = sportMeta(next.sportId);
+        const start = new Date(next.startsAt);
+        const links = mapsLinks(next);
+        const mates = matchPlayers(next).filter(x => !x.me);
+        nextEl.innerHTML = `
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="text-2xl text-white flex items-center gap-2"><i data-lucide="timer" class="w-5 h-5 text-mates-green"></i>Prochain match</h2>
+            ${statusBadgeHtml(next)}
+          </div>
+          <div class="flex items-center gap-4">
+            <span class="text-5xl">${sport.icon}</span>
+            <div class="min-w-0">
+              <div class="text-white font-bold text-lg truncate">${escapeHtml(next.title)}</div>
+              <div class="text-sm text-slate-400">${formatMatchDay(start)} à ${formatHour(start)} ${weatherChipHtml(next) ? "· " + weatherChipHtml(next) : ""}</div>
+            </div>
+          </div>
+          <div class="mt-5 p-4 rounded-2xl bg-mates-off border border-slate-800 flex items-center justify-between gap-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Coup d'envoi dans</div>
+              <div id="dash-countdown" class="font-display text-4xl text-mates-green">${countdownText(start)}</div>
+            </div>
+            <button onclick="MatesApp.openMatchDetail('${next.id}')" class="btn-outline-neon text-xs py-2 px-4">Détails & chat</button>
+          </div>
+          <div class="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="text-sm">
+              <div class="text-white font-semibold">${escapeHtml(next.clubName)}</div>
+              <div class="flex gap-3 text-xs font-semibold mt-1">
+                <a href="${links.google}" target="_blank" rel="noopener" class="text-mates-green hover:underline inline-flex items-center gap-1"><i data-lucide="map" class="w-3.5 h-3.5"></i>Google Maps</a>
+                <a href="${links.waze}" target="_blank" rel="noopener" class="text-mates-green hover:underline inline-flex items-center gap-1"><i data-lucide="navigation" class="w-3.5 h-3.5"></i>Waze</a>
+              </div>
+            </div>
+            <div>
+              <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-1">Coéquipiers</div>
+              <div class="flex items-center gap-2">
+                <div class="flex items-center pl-2">${playersAvatarsHtml(next, "w-8 h-8")}</div>
+                <span class="text-xs text-slate-300">${mates.length ? escapeHtml(mates.slice(0, 3).map(x => x.name).join(", ")) + (mates.length > 3 ? "…" : "") : "Toi seul pour l'instant"}</span>
+              </div>
+            </div>
+          </div>`;
+
+        if (state.countdownTimer) clearInterval(state.countdownTimer);
+        state.countdownTimer = setInterval(() => {
+          const el = document.getElementById("dash-countdown");
+          if (!el || state.currentRoute !== "dashboard") {
+            clearInterval(state.countdownTimer);
+            state.countdownTimer = null;
+            return;
+          }
+          el.textContent = countdownText(start);
+        }, 30000);
+      }
+    }
+
+    // Statistiques
+    const statsEl = document.getElementById("dash-stats");
+    if (statsEl) {
+      const now = new Date();
+      const joinedThisMonth = state.matches.filter(m => isJoined(m) && new Date(m.startsAt).getMonth() === now.getMonth()).length;
+      const monthCount = (p.matchesThisMonth || 0) + joinedThisMonth;
+      const favorite = p.sports && p.sports[0] ? `${sportMeta(p.sports[0].id).icon} ${p.sports[0].name}` : "–";
+      const winRate = p.winRate != null ? `${p.winRate} %` : "–";
+      const hours = Math.round(p.hoursTotal || 0);
+      const weekly = Array.isArray(p.weeklyMatches) ? p.weeklyMatches : [0, 0, 0, 0, 0, 0];
+      const maxWeek = Math.max(1, ...weekly);
+      const stat = (label, value, icon) => `
+        <div class="p-3.5 rounded-2xl bg-mates-off border border-slate-800">
+          <div class="text-[11px] text-slate-400 flex items-center gap-1"><i data-lucide="${icon}" class="w-3.5 h-3.5 text-mates-green"></i>${label}</div>
+          <div class="font-display text-3xl text-white mt-1 truncate">${value}</div>
+        </div>`;
+      statsEl.innerHTML = stat("Matchs ce mois-ci", monthCount, "calendar") +
+        stat("Sport favori", favorite, "heart") +
+        stat("Taux de victoire", winRate, "trophy") +
+        stat("Heures de sport", `${hours} h`, "clock") +
+        `<div class="col-span-2 p-3.5 rounded-2xl bg-mates-off border border-slate-800">
+          <div class="text-[11px] text-slate-400 mb-2">Matchs par semaine (6 dernières)</div>
+          <div class="flex items-end gap-2 h-16" role="img" aria-label="Matchs par semaine : ${weekly.join(", ")}">
+            ${weekly.map((w, i) => `<div class="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+              <div class="w-full rounded-t-md ${i === weekly.length - 1 ? "bg-mates-green" : "bg-slate-600"}" style="height:${Math.max(6, (w / maxWeek) * 100)}%"></div>
+              <span class="text-[10px] text-slate-500">${w}</span>
+            </div>`).join("")}
+          </div>
+        </div>`;
+    }
+
+    // Matchs à venir
+    const upEl = document.getElementById("dash-upcoming");
+    if (upEl) {
+      upEl.innerHTML = upcoming.length ? upcoming.map(m => {
+        const start = new Date(m.startsAt);
+        return `
+          <button onclick="MatesApp.openMatchDetail('${m.id}')" class="w-full text-left flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-mates-off border border-slate-800 hover:border-mates-green/60">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="text-2xl">${sportMeta(m.sportId).icon}</span>
+              <div class="min-w-0">
+                <div class="text-sm font-bold text-white truncate">${escapeHtml(m.title)}</div>
+                <div class="text-xs text-slate-400 truncate">${formatMatchDay(start)} · ${formatHour(start)} · ${escapeHtml(m.clubName)}</div>
+              </div>
+            </div>
+            <span class="text-xs font-semibold ${m.mine ? "text-mates-green" : "text-slate-300"} whitespace-nowrap">${m.mine ? "Organisateur" : "Inscrit"}</span>
+          </button>`;
+      }).join("") : `<p class="text-sm text-slate-400">Rejoins un match ou crée le tien : il apparaîtra ici.</p>`;
+    }
+
+    const progressEl = document.getElementById("dash-progress");
+    if (progressEl) progressEl.innerHTML = progressHtml(p);
+    const badgesEl = document.getElementById("dash-badges");
+    if (badgesEl) badgesEl.innerHTML = badgesHtml(p);
+
+    lucide.createIcons();
+    loadWeather();
   }
 
   /**
@@ -1741,12 +2786,23 @@ const MatesApp = (() => {
     updateSportLevel,
     toggleEditSlot,
     openJoinModal,
-    confirmJoinMatch,
+    openMatchDetail,
+    joinMatch,
+    leaveMatch,
+    sendChatMessage,
+    shareMatch,
+    setMatchesWhen,
     openProposeMatchModal,
     sendMatchInvitation,
     openBookingModal,
     openCreateMatchModal,
+    submitCreateMatch,
     closeModals,
+    setMatesWhen,
+    heroSearch,
+    toggleLevelHelp,
+    createSearchAlert,
+    toggleLiveTonight,
     showToast
   };
 })();

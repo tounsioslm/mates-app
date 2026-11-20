@@ -6,13 +6,16 @@
   <title>Mates. — Trouve tes partenaires de sport et réserve ton terrain</title>
   <meta name="description" content="L'application tout-en-un qui facilite la pratique du sport amateur en groupe. Trouvez des mates et réservez des terrains en quelques clics.">
   
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="assets/logo-cropped.png">
-  
-  <!-- Fonts Google: Plus Jakarta Sans & Inter -->
+  <!-- Favicon : le « M » du logo sur fond transparent -->
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon-64.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon-192.png">
+  <link rel="apple-touch-icon" href="assets/favicon-192.png">
+  <meta name="theme-color" content="#232323">
+
+  <!-- Fonts Google : Plus Jakarta Sans (texte) & Barlow Condensed italique (titres sportifs) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,700&family=Barlow+Condensed:ital,wght@1,600;1,700;1,800&display=swap" rel="stylesheet">
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -22,18 +25,27 @@
       theme: {
         extend: {
           colors: {
+            // Charte du logo : anthracite mat + vert lime du swoosh
             mates: {
-              green: '#C0FB18',
-              greenHover: '#a6dc0c',
-              greenLight: 'rgba(192, 251, 24, 0.15)',
-              dark: '#0B0F19',
-              card: '#131A29',
-              cardElevated: '#1B2438',
-              border: '#23304A',
+              green: '#A6E20E',
+              greenHover: '#B4F012',
+              greenLight: 'rgba(166, 226, 14, 0.15)',
+              dark: '#232323',
+              card: '#2E2E2E',
+              cardElevated: '#363636',
+              border: '#3D3D3D',
+              off: '#1A1A1A',
+            },
+            // Gris neutres (remplace le gris bleuté par défaut de Tailwind)
+            slate: {
+              50: '#FAFAFA', 100: '#F4F4F5', 200: '#E4E4E7', 300: '#D4D4D8',
+              400: '#A1A1AA', 500: '#7A7A82', 600: '#52525B', 700: '#3F3F46',
+              800: '#333333', 900: '#272727', 950: '#1C1C1C',
             }
           },
           fontFamily: {
             sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            display: ['"Barlow Condensed"', '"Plus Jakarta Sans"', 'sans-serif'],
           }
         }
       }
@@ -44,7 +56,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Styles personnalisés -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body class="bg-mates-dark text-slate-100 min-h-screen flex flex-col font-sans selection:bg-mates-green selection:text-black">
 
@@ -75,6 +87,10 @@
         <a href="#matches" id="nav-matches" class="nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300">
           Matchs ouverts
         </a>
+        <button type="button" onclick="MatesApp.openCreateMatchModal()" class="ml-1 px-4 py-2 rounded-full text-sm font-bold text-mates-green border border-mates-green/40 hover:bg-mates-green hover:text-mates-dark transition-all flex items-center gap-1.5">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span class="hidden lg:inline">Créer un match</span>
+        </button>
       </nav>
 
       <!-- Zone utilisateur & CTA Connexion -->
@@ -94,6 +110,7 @@
       <a href="#mates" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Trouver un mate</a>
       <a href="#sports" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Les 14 Sports</a>
       <a href="#matches" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Matchs ouverts</a>
+      <a href="#" onclick="MatesApp.openCreateMatchModal(); return false;" class="mobile-nav-link block px-4 py-2 rounded-lg font-bold text-mates-green hover:bg-mates-cardElevated">+ Créer un match</a>
       <div id="mobile-auth-links" class="space-y-2 pt-3">
         <a href="#auth/register" class="mobile-nav-link block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Créer mon profil</a>
         <a href="#auth/login" class="mobile-nav-link block px-4 py-2 rounded-lg font-semibold border border-mates-border text-center">Se connecter</a>
@@ -126,9 +143,9 @@
               </div>
 
               <!-- Grand Titre -->
-              <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
-                Trouve ton <span class="text-mates-green neon-text-glow">mate</span>,<br>
-                rejoins le match,<br>
+              <h1 class="text-5xl sm:text-6xl lg:text-7xl text-white">
+                Trouve ton <span class="hl-e">mate</span>,<br>
+                rejoins le <span class="swoosh-underline">match</span>,<br>
                 prends le terrain.
               </h1>
 
@@ -139,10 +156,26 @@
                 (padel, football, basket, tennis...). Trouve des partenaires de ton niveau et réserve en quelques clics.
               </p>
 
+              <!-- Recherche rapide : sport + ville + Rechercher -->
+              <form id="hero-search" onsubmit="MatesApp.heroSearch(event)" class="bg-mates-card border border-mates-border rounded-2xl p-2 flex flex-col sm:flex-row gap-2 max-w-2xl mx-auto lg:mx-0 shadow-xl">
+                <label class="sr-only" for="hero-sport">Sport</label>
+                <select id="hero-sport" class="flex-1 min-w-0 bg-mates-off border border-mates-border rounded-xl px-3.5 py-3 text-sm text-white focus:outline-none focus:border-mates-green">
+                  <option value="all">Tous les sports</option>
+                </select>
+                <label class="sr-only" for="hero-city">Ville</label>
+                <select id="hero-city" class="flex-1 min-w-0 bg-mates-off border border-mates-border rounded-xl px-3.5 py-3 text-sm text-white focus:outline-none focus:border-mates-green">
+                  <option value="all">Toutes les villes</option>
+                </select>
+                <button type="submit" class="btn-neon py-3 px-6 text-sm">
+                  <i data-lucide="search" class="w-4 h-4"></i>
+                  <span>Rechercher</span>
+                </button>
+              </form>
+
               <!-- Deux boutons d'action (Wireframe 1) -->
-              <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
+              <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4">
                 <a href="#mates" class="btn-neon text-base shadow-lg">
-                  <i data-lucide="search" class="w-5 h-5"></i>
+                  <i data-lucide="users" class="w-5 h-5"></i>
                   <span>Trouver un mate</span>
                 </a>
                 <a href="#sports" class="btn-outline-neon text-base">
@@ -171,11 +204,14 @@
             <!-- Colonne Illustration / Carte interactive hero -->
             <div class="lg:col-span-5 relative">
               <div class="relative mx-auto max-w-md">
-                <!-- Halo de fond -->
-                <div class="absolute -inset-1 bg-gradient-to-r from-mates-green/30 to-emerald-500/20 rounded-3xl blur-2xl opacity-75"></div>
-                
-                <!-- Carte "Match en direct" style Playtomic -->
-                <div class="relative bg-mates-card/95 border border-mates-border rounded-2xl p-6 shadow-2xl backdrop-blur-xl">
+                <!-- Swoosh lumineux (reprend la courbe du logo) -->
+                <svg class="hero-swoosh" viewBox="0 0 600 400" aria-hidden="true">
+                  <path d="M20 360 C 160 250, 330 170, 470 110 C 540 80, 585 40, 520 22" fill="none" stroke="#A6E20E" stroke-width="7" stroke-linecap="round"/>
+                </svg>
+                <div class="absolute -inset-1 bg-mates-green/10 rounded-3xl blur-2xl"></div>
+
+                <!-- Carte "Match en direct" -->
+                <div class="relative z-10 bg-mates-card/95 border border-mates-border rounded-2xl p-6 shadow-2xl backdrop-blur-xl">
                   <div class="flex items-center justify-between pb-4 border-b border-mates-border">
                     <div class="flex items-center gap-3">
                       <span class="text-3xl">🎾</span>
@@ -184,9 +220,7 @@
                         <h4 class="text-base font-bold text-white">Liège Belle-Île • Terrain 2</h4>
                       </div>
                     </div>
-                    <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Reste 1 place
-                    </span>
+                    <span class="badge-spots">Reste 1 place</span>
                   </div>
 
                   <!-- Date & heure -->
@@ -245,7 +279,7 @@
           <div class="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-4">
             <div>
               <div class="text-xs font-bold text-mates-green tracking-widest uppercase mb-1">Catalogue officiel</div>
-              <h2 class="text-3xl font-extrabold text-white">Choisis ton terrain</h2>
+              <h2 class="text-4xl text-white">Choisis ton <span class="swoosh-underline">terrain</span></h2>
             </div>
             <a href="#sports" class="text-sm font-semibold text-mates-green hover:underline flex items-center gap-1">
               <span>Voir les 14 sports en détail</span>
@@ -267,7 +301,7 @@
           
           <div class="text-center max-w-2xl mx-auto mb-16">
             <div class="text-xs font-bold text-mates-green tracking-widest uppercase mb-2">Simplicité & Rapidité</div>
-            <h2 class="text-3xl sm:text-4xl font-extrabold text-white">Comment ça marche ?</h2>
+            <h2 class="text-4xl sm:text-5xl text-white">Comment ça <span class="hl-e">marche</span> ?</h2>
             <p class="text-slate-400 mt-3">Fini le casse-tête des messages sans réponse sur WhatsApp. Trois étapes et tu es sur le terrain.</p>
           </div>
 
@@ -347,7 +381,7 @@
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-mates-border pb-6">
           <div>
             <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Communauté sportive</div>
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-white">Trouve ton mate</h1>
+            <h1 class="text-4xl sm:text-5xl text-white">Trouve ton <span class="hl-e">mate</span></h1>
             <p class="text-slate-400 mt-2 text-sm">Découvre les profils de sportifs amateurs de ton niveau prêts à fouler le terrain.</p>
           </div>
           <div class="text-sm text-slate-400">
@@ -372,9 +406,22 @@
 
             <!-- Filtre Niveau -->
             <div>
-              <label for="filter-level" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Niveau
-              </label>
+              <div class="flex items-center gap-1.5 mb-1.5">
+                <label for="filter-level" class="block text-xs font-bold text-slate-300 uppercase tracking-wider">Niveau</label>
+                <div class="level-help">
+                  <button type="button" id="level-help-btn" onclick="MatesApp.toggleLevelHelp(event)" aria-expanded="false" aria-controls="level-help-panel" title="Comprendre les niveaux" class="w-5 h-5 rounded-full border border-slate-500 text-slate-300 hover:border-mates-green hover:text-mates-green text-[11px] font-bold leading-none flex items-center justify-center">?</button>
+                  <div id="level-help-panel" role="tooltip" class="level-help-panel hidden">
+                    <div class="text-sm font-bold text-white mb-2">L'échelle de niveau Mates</div>
+                    <ul class="space-y-2 text-xs text-slate-300">
+                      <li><strong class="text-mates-green">Nv. 1-2 · Débutant</strong><br>Découverte ou reprise. Tu connais les bases et tu joues surtout pour le plaisir.</li>
+                      <li><strong class="text-mates-green">Nv. 3 · Intermédiaire</strong><br>Maîtrise des règles, échanges réguliers, pratique loisir chaque semaine.</li>
+                      <li><strong class="text-mates-green">Nv. 4 · Confirmé</strong><br>Technique solide et tactique de jeu. Tournois amicaux ou championnat régional.</li>
+                      <li><strong class="text-mates-green">Nv. 5 · Expert</strong><br>Compétition en club, classement officiel, jeu rapide et précis.</li>
+                    </ul>
+                    <p class="text-[11px] text-slate-500 mt-3">Le niveau évolue automatiquement selon tes résultats (▲ / ▼).</p>
+                  </div>
+                </div>
+              </div>
               <select id="filter-level" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green transition-all">
                 <option value="all">Tous les niveaux</option>
                 <option value="Débutant">Débutant (Niv. 1-2)</option>
@@ -409,6 +456,23 @@
           </div>
         </div>
 
+        <!-- FILTRES RAPIDES EN PILULES + DISPO CE SOIR -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div class="flex flex-wrap gap-2" id="mates-quick-pills" role="group" aria-label="Filtres rapides">
+            <button type="button" class="pill" data-when="tonight" onclick="MatesApp.setMatesWhen('tonight')"><i data-lucide="moon" class="w-3.5 h-3.5"></i>Ce soir</button>
+            <button type="button" class="pill" data-when="tomorrow" onclick="MatesApp.setMatesWhen('tomorrow')"><i data-lucide="sunrise" class="w-3.5 h-3.5"></i>Demain</button>
+            <button type="button" class="pill" data-when="weekend" onclick="MatesApp.setMatesWhen('weekend')"><i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>Ce week-end</button>
+            <button type="button" class="pill" data-when="live" onclick="MatesApp.setMatesWhen('live')"><i data-lucide="zap" class="w-3.5 h-3.5"></i>Dispo maintenant</button>
+          </div>
+          <div class="flex items-center gap-3 bg-mates-card border border-mates-border rounded-2xl px-4 py-2.5">
+            <div class="leading-tight">
+              <div class="text-sm font-bold text-white">Dispo pour jouer ce soir ⚡</div>
+              <div class="text-[11px] text-slate-400">Tu apparais en premier, avec un halo vert.</div>
+            </div>
+            <button type="button" id="live-toggle-mates" class="switch" role="switch" aria-checked="false" aria-label="Dispo pour jouer ce soir" onclick="MatesApp.toggleLiveTonight()"></button>
+          </div>
+        </div>
+
         <!-- GRILLE DE CARTES MATES (Wireframe 2: photo, prénom/âge, ville, bio, sports + niveau) -->
         <div id="mates-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <!-- Rempli dynamiquement par JS -->
@@ -417,11 +481,18 @@
         <!-- État vide si aucun mate ne correspond -->
         <div id="mates-empty-state" class="hidden text-center py-16 bg-mates-card/50 rounded-2xl border border-dashed border-mates-border p-8">
           <i data-lucide="frown" class="w-12 h-12 text-slate-500 mx-auto mb-3"></i>
-          <h3 class="text-lg font-bold text-white">Aucun mate ne correspond à ces critères</h3>
-          <p class="text-sm text-slate-400 mt-1">Essaie d'élargir ta recherche ou de changer de ville.</p>
-          <button onclick="MatesApp.resetFilters()" class="btn-neon mt-4 text-xs py-2 px-4">
-            Afficher tous les mates
-          </button>
+          <h3 class="text-lg font-bold text-white">Aucun mate trouvé</h3>
+          <p class="text-sm text-slate-400 mt-1" id="mates-empty-text">Personne ne correspond encore à ces critères.</p>
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
+            <button type="button" onclick="MatesApp.createSearchAlert()" class="btn-neon text-sm py-2.5 px-5">
+              <i data-lucide="bell-plus" class="w-4 h-4"></i>
+              <span>Publier une alerte pour ce créneau</span>
+            </button>
+            <button type="button" onclick="MatesApp.resetFilters()" class="btn-outline-neon text-sm py-2.5 px-5">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              <span>Réinitialiser les filtres</span>
+            </button>
+          </div>
         </div>
 
       </div>
@@ -437,7 +508,7 @@
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-mates-border pb-6">
           <div>
             <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Catalogue complet</div>
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-white">Les sports</h1>
+            <h1 class="text-4xl sm:text-5xl text-white">Les <span class="hl-e">sports</span></h1>
             <p class="text-slate-400 mt-2 text-sm">14 disciplines sportives avec leurs règles, terrains et mates dédiés.</p>
           </div>
           <div class="relative w-full md:w-72">
@@ -529,6 +600,22 @@
           <!-- Rempli dynamiquement par JS -->
         </div>
 
+        <!-- PROGRESSION + BADGES -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div class="bg-mates-card border border-mates-border rounded-3xl p-6 space-y-4">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2 border-b border-mates-border pb-3">
+              <i data-lucide="trending-up" class="w-5 h-5 text-mates-green"></i><span>Niveau & derniers matchs</span>
+            </h3>
+            <div id="public-progress"></div>
+          </div>
+          <div class="bg-mates-card border border-mates-border rounded-3xl p-6 space-y-4">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2 border-b border-mates-border pb-3">
+              <i data-lucide="award" class="w-5 h-5 text-mates-green"></i><span>Badges & succès</span>
+            </h3>
+            <div id="public-badges" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+          </div>
+        </div>
+
         <!-- GRILLE DEUX COLONNES (Sports + Disponibilités) -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
@@ -573,7 +660,7 @@
                 <span class="text-slate-200">Disponible</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <span class="w-3.5 h-3.5 rounded bg-white/5 border border-mates-border inline-block"></span>
+                <span class="w-3.5 h-3.5 rounded bg-mates-off border border-slate-800 inline-block"></span>
                 <span>Indisponible</span>
               </div>
             </div>
@@ -594,7 +681,7 @@
         <div class="flex items-center justify-between border-b border-mates-border pb-6">
           <div>
             <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Espace personnel</div>
-            <h1 class="text-3xl font-extrabold text-white">Mon profil (édition)</h1>
+            <h1 class="text-4xl text-white">Mon <span class="hl-e">profil</span></h1>
           </div>
           <button onclick="MatesApp.viewMyPublicProfile()" class="btn-outline-neon text-xs py-2 px-4 flex items-center gap-2">
             <i data-lucide="eye" class="w-4 h-4"></i>
@@ -836,7 +923,7 @@
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-mates-border pb-6">
           <div>
             <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Matchs en direct</div>
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-white">Matchs ouverts</h1>
+            <h1 class="text-4xl sm:text-5xl text-white">Matchs <span class="hl-e">ouverts</span></h1>
             <p class="text-slate-400 mt-2 text-sm">Il manque 1 ou 2 joueurs pour compléter la partie. Réserve ta place et rejoins-les !</p>
           </div>
           <button onclick="MatesApp.openCreateMatchModal()" class="btn-neon text-xs py-2.5 px-4 flex items-center gap-2">
@@ -845,14 +932,101 @@
           </button>
         </div>
 
+        <!-- Filtres rapides -->
+        <div class="flex flex-wrap gap-2" id="matches-quick-pills" role="group" aria-label="Filtres rapides des matchs">
+          <button type="button" class="pill" data-when="tonight" onclick="MatesApp.setMatchesWhen('tonight')"><i data-lucide="moon" class="w-3.5 h-3.5"></i>Ce soir</button>
+          <button type="button" class="pill" data-when="tomorrow" onclick="MatesApp.setMatchesWhen('tomorrow')"><i data-lucide="sunrise" class="w-3.5 h-3.5"></i>Demain</button>
+          <button type="button" class="pill" data-when="weekend" onclick="MatesApp.setMatchesWhen('weekend')"><i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>Ce week-end</button>
+          <button type="button" class="pill" data-when="free" onclick="MatesApp.setMatchesWhen('free')"><i data-lucide="badge-euro" class="w-3.5 h-3.5"></i>Terrains gratuits</button>
+        </div>
+
         <div id="open-matches-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <!-- Rempli dynamiquement par JS -->
+        </div>
+
+        <div id="matches-empty-state" class="hidden text-center py-14 bg-mates-card/50 rounded-2xl border border-dashed border-mates-border p-8">
+          <i data-lucide="calendar-x" class="w-12 h-12 text-slate-500 mx-auto mb-3"></i>
+          <h3 class="text-lg font-bold text-white">Aucun match sur ce créneau</h3>
+          <p class="text-sm text-slate-400 mt-1">Lance le tien : les mates du coin seront prévenus.</p>
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
+            <button type="button" onclick="MatesApp.openCreateMatchModal()" class="btn-neon text-sm py-2.5 px-5">
+              <i data-lucide="plus" class="w-4 h-4"></i><span>Créer un match</span>
+            </button>
+            <button type="button" onclick="MatesApp.setMatchesWhen(null)" class="btn-outline-neon text-sm py-2.5 px-5">
+              <span>Voir tous les matchs</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------------
+         MON ESPACE (tableau de bord du joueur connecté)
+         ------------------------------------------------------------------ -->
+    <section id="view-dashboard" class="page-view hidden fade-in py-10">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-mates-border pb-6">
+          <div class="flex items-center gap-4">
+            <img id="dash-avatar" src="assets/favicon-192.png" alt="" class="w-16 h-16 rounded-2xl object-cover ring-2 ring-mates-border">
+            <div>
+              <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Mon espace</div>
+              <h1 class="text-4xl sm:text-5xl text-white">Salut <span id="dash-firstname" class="hl-e">toi</span> !</h1>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-3 bg-mates-card border border-mates-border rounded-2xl px-4 py-2.5">
+              <span class="text-sm font-bold text-white">Dispo ce soir ⚡</span>
+              <button type="button" id="live-toggle-dash" class="switch" role="switch" aria-checked="false" aria-label="Dispo pour jouer ce soir" onclick="MatesApp.toggleLiveTonight()"></button>
+            </div>
+            <a href="#edit-profile" class="btn-outline-neon text-xs py-2.5 px-4"><i data-lucide="pencil" class="w-4 h-4"></i><span>Modifier mon profil</span></a>
+            <a href="#mate/my-profile" class="btn-outline-neon text-xs py-2.5 px-4"><i data-lucide="eye" class="w-4 h-4"></i><span>Voir public</span></a>
+          </div>
+        </div>
+
+        <!-- Prochain match + statistiques -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div id="dash-next-match" class="lg:col-span-7 bg-mates-card border border-mates-border rounded-3xl p-6"></div>
+          <div class="lg:col-span-5 bg-mates-card border border-mates-border rounded-3xl p-6 space-y-4">
+            <h2 class="text-2xl text-white flex items-center gap-2"><i data-lucide="activity" class="w-5 h-5 text-mates-green"></i>Mes stats</h2>
+            <div id="dash-stats" class="grid grid-cols-2 gap-3"></div>
+          </div>
+        </div>
+
+        <!-- Matchs à venir -->
+        <div class="bg-mates-card border border-mates-border rounded-3xl p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <h2 class="text-2xl text-white flex items-center gap-2"><i data-lucide="calendar-check" class="w-5 h-5 text-mates-green"></i>Mes prochains matchs</h2>
+            <a href="#matches" class="text-xs font-semibold text-mates-green hover:underline">Trouver un match</a>
+          </div>
+          <div id="dash-upcoming" class="space-y-3"></div>
+        </div>
+
+        <!-- Progression & badges -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-mates-card border border-mates-border rounded-3xl p-6 space-y-4">
+            <h2 class="text-2xl text-white flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-mates-green"></i>Ma progression</h2>
+            <div id="dash-progress"></div>
+          </div>
+          <div class="bg-mates-card border border-mates-border rounded-3xl p-6 space-y-4">
+            <h2 class="text-2xl text-white flex items-center gap-2"><i data-lucide="award" class="w-5 h-5 text-mates-green"></i>Mes badges</h2>
+            <div id="dash-badges" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+          </div>
         </div>
 
       </div>
     </section>
 
   </main>
+
+  <!-- Barre d'onglets mobile -->
+  <nav class="bottom-tabbar" aria-label="Navigation principale mobile">
+    <a href="#home" data-tab="home"><i data-lucide="home" class="w-5 h-5"></i><span>Accueil</span></a>
+    <a href="#mates" data-tab="mates"><i data-lucide="users" class="w-5 h-5"></i><span>Mates</span></a>
+    <a href="#matches" data-tab="matches"><i data-lucide="swords" class="w-5 h-5"></i><span>Matchs</span></a>
+    <a href="#dashboard" data-tab="dashboard"><i data-lucide="user" class="w-5 h-5"></i><span>Profil</span></a>
+  </nav>
 
   <!-- ======================================================================
        PIED DE PAGE (FOOTER)
@@ -924,43 +1098,91 @@
   <!-- ======================================================================
        MODALES D'INTERACTION (Rejoindre un match, Proposer une partie)
        ====================================================================== -->
-  <!-- Modale Rejoindre un match -->
-  <div id="join-match-modal" class="fixed inset-0 z-50 modal-overlay hidden flex items-center justify-center p-4">
-    <div class="bg-mates-card border border-mates-border rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-6 relative animate-fadeIn">
-      <button onclick="MatesApp.closeModals()" class="absolute top-5 right-5 text-slate-400 hover:text-white">
+  <!-- Modale Détail d'un match (infos, équipements, météo, chat, partage) -->
+  <div id="match-detail-modal" class="fixed inset-0 z-50 modal-overlay hidden flex items-end sm:items-center justify-center sm:p-4" onclick="if (event.target === this) MatesApp.closeModals()">
+    <div class="bg-mates-card border border-mates-border rounded-t-3xl sm:rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl relative">
+      <button onclick="MatesApp.closeModals()" aria-label="Fermer" class="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-mates-off/80 text-slate-300 hover:text-white flex items-center justify-center">
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
-      
-      <div class="space-y-2">
-        <div class="text-xs font-bold text-mates-green uppercase tracking-wider">Réservation instantanée</div>
-        <h3 id="modal-match-title" class="text-xl font-bold text-white">Rejoindre la partie</h3>
-        <p id="modal-match-details" class="text-xs text-slate-400">Détails du match...</p>
-      </div>
-
-      <div class="p-4 bg-mates-cardElevated rounded-2xl border border-mates-border space-y-3 text-sm">
-        <div class="flex justify-between text-slate-300">
-          <span>Terrain & Horaires :</span>
-          <strong id="modal-match-time" class="text-white">19:00 - 20:30</strong>
-        </div>
-        <div class="flex justify-between text-slate-300">
-          <span>Tarif par joueur :</span>
-          <strong id="modal-match-price" class="text-mates-green">10 €</strong>
-        </div>
-        <div class="flex justify-between text-slate-300">
-          <span>Mode de paiement :</span>
-          <span class="text-xs text-slate-400">Par carte ou sur place au club</span>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <button onclick="MatesApp.closeModals()" class="w-1/2 btn-outline-neon py-2.5 text-xs">
-          Annuler
-        </button>
-        <button onclick="MatesApp.confirmJoinMatch()" class="w-1/2 btn-neon py-2.5 text-xs">
-          Confirmer ma place
-        </button>
+      <div id="match-detail-body" class="p-6 space-y-6">
+        <!-- Rempli par JS -->
       </div>
     </div>
+  </div>
+
+  <!-- Modale Créer un match -->
+  <div id="create-match-modal" class="fixed inset-0 z-50 modal-overlay hidden flex items-end sm:items-center justify-center sm:p-4" onclick="if (event.target === this) MatesApp.closeModals()">
+    <form id="create-match-form" onsubmit="MatesApp.submitCreateMatch(event)" class="bg-mates-card border border-mates-border rounded-t-3xl sm:rounded-3xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl space-y-5 relative">
+      <button type="button" onclick="MatesApp.closeModals()" aria-label="Fermer" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <div class="space-y-1">
+        <div class="text-xs font-bold text-mates-green uppercase tracking-wider">Nouvelle annonce</div>
+        <h3 class="font-display text-3xl text-white">Créer un match</h3>
+        <p class="text-xs text-slate-400">Ex. : « Cherche 2 joueurs pour un Five demain à 20h ». Les mates du coin pourront rejoindre en un clic.</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2 sm:col-span-1">
+          <label for="cm-sport" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Sport</label>
+          <select id="cm-sport" required class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green"></select>
+        </div>
+        <div class="col-span-2 sm:col-span-1">
+          <label for="cm-city" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Ville</label>
+          <select id="cm-city" required class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green"></select>
+        </div>
+        <div class="col-span-2">
+          <label for="cm-place" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Lieu (club, salle, parc…)</label>
+          <input id="cm-place" required maxlength="60" placeholder="Ex. : Five Arena Rocourt" class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green">
+        </div>
+        <div>
+          <label for="cm-date" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Date</label>
+          <input id="cm-date" type="date" required class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green [color-scheme:dark]">
+        </div>
+        <div>
+          <label for="cm-time" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Heure</label>
+          <input id="cm-time" type="time" required value="20:00" class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green [color-scheme:dark]">
+        </div>
+        <div>
+          <label for="cm-missing" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Joueurs recherchés</label>
+          <input id="cm-missing" type="number" min="1" max="21" value="2" required class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green">
+        </div>
+        <div>
+          <label for="cm-price" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Prix / pers. (€)</label>
+          <input id="cm-price" type="number" min="0" max="100" step="0.5" value="8" required class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green">
+        </div>
+        <div class="col-span-2">
+          <label for="cm-level" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Niveau attendu</label>
+          <select id="cm-level" class="w-full bg-mates-off border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green">
+            <option>Tous niveaux</option>
+            <option>Débutant (Nv. 1-2)</option>
+            <option selected>Intermédiaire (Nv. 3)</option>
+            <option>Confirmé (Nv. 4)</option>
+            <option>Expert (Nv. 5)</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="flex items-center justify-between gap-3 p-3 bg-mates-off rounded-xl border border-mates-border cursor-pointer">
+        <span class="text-sm text-white font-semibold">Terrain déjà réservé</span>
+        <input id="cm-booked" type="checkbox" class="w-5 h-5 accent-[#A6E20E]">
+      </label>
+
+      <fieldset>
+        <legend class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Sur place</legend>
+        <div class="grid grid-cols-2 gap-2 text-sm text-slate-200" id="cm-amenities">
+          <label class="flex items-center gap-2"><input type="checkbox" value="balls" class="accent-[#A6E20E]"> Balles / ballon fournis</label>
+          <label class="flex items-center gap-2"><input type="checkbox" value="racket" class="accent-[#A6E20E]"> Prêt de raquette</label>
+          <label class="flex items-center gap-2"><input type="checkbox" value="showers" class="accent-[#A6E20E]"> Douches / vestiaires</label>
+          <label class="flex items-center gap-2"><input type="checkbox" value="parking" class="accent-[#A6E20E]"> Parking gratuit</label>
+        </div>
+      </fieldset>
+
+      <div class="flex items-center gap-3 pt-1">
+        <button type="button" onclick="MatesApp.closeModals()" class="w-1/2 btn-outline-neon py-2.5 text-sm">Annuler</button>
+        <button type="submit" class="w-1/2 btn-neon py-2.5 text-sm"><i data-lucide="send" class="w-4 h-4"></i><span>Publier le match</span></button>
+      </div>
+    </form>
   </div>
 
   <!-- Modale Proposer une partie à un Mate -->
@@ -1021,8 +1243,8 @@
 
   <!-- Scripts Application -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="js/supabase-config.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/supabase-config.js?v=4"></script>
+  <script src="js/data.js?v=4"></script>
+  <script src="js/app.js?v=4"></script>
 </body>
 </html>

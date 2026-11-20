@@ -234,7 +234,7 @@ const INITIAL_MATES = [
     age: 23,
     city: "Liège",
     distanceKm: 1.8,
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
+    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80",
     bio: "Étudiant à HELMo, passionné de sports de raquette ! Je joue au padel 2x par semaine et je cherche un 4e joueur pour des parties intenses le soir.",
     sports: [
       { id: "padel", name: "Padel", level: "Confirmé", rating: 4 },
@@ -554,76 +554,181 @@ const INITIAL_MATES = [
   }
 ];
 
-// Matchs ouverts (style Playtomic)
+// Matchs ouverts. Les dates sont calculées au chargement (« day » relatif à aujourd'hui),
+// pour que la démo reste toujours à jour.
+//   day : 0 = aujourd'hui, 1 = demain, "sat" / "sun" = samedi / dimanche qui vient
+const AVATAR = {
+  thomas: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80",
+  elena: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=200&q=80",
+  romain: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80",
+  julien: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+  camille: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
+  maxime: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+  nathan: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80",
+  ines: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&q=80",
+  sarah: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80",
+  chloe: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80",
+  lucas: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=200&q=80"
+};
+
 const INITIAL_OPEN_MATCHES = [
   {
     id: "match-1",
     sportId: "padel",
-    sportName: "Padel",
-    sportIcon: "🎾",
+    title: "Padel 2 vs 2",
     clubName: "Padel Club Liège Belle-Île",
-    courtName: "Terrain 2 (Panoramique)",
-    date: "Aujourd'hui",
-    time: "19:00 - 20:30",
-    levelRequired: "Intermédiaire (Niveau 3 - 4)",
-    pricePerPerson: "10 €",
+    courtName: "Terrain 2 (panoramique)",
+    city: "Liège",
+    day: 0, start: "19:00", durationMin: 90,
+    levelRequired: "Intermédiaire (Nv. 3 - 4)",
+    price: 10,
+    payment: "Paiement sur place ou via l'app",
+    courtBooked: true,
     totalSlots: 4,
-    bookedSlots: 3,
-    host: {
-      name: "Thomas L.",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
-    },
+    outdoor: false,
+    amenities: ["balls", "racket", "showers", "parking"],
     players: [
-      { name: "Thomas L.", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80" },
-      { name: "Elena M.", avatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=200&q=80" },
-      { name: "Romain W.", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&q=80" }
+      { name: "Thomas L.", avatar: AVATAR.thomas, mateId: "mate-1" },
+      { name: "Elena M.", avatar: AVATAR.elena, mateId: "mate-6" },
+      { name: "Romain W.", avatar: AVATAR.romain, mateId: "mate-12" }
+    ],
+    chat: [
+      { author: "Thomas L.", avatar: AVATAR.thomas, text: "J'ai pris des balles neuves, rendez-vous 10 min avant à l'accueil !", ago: 95 },
+      { author: "Elena M.", avatar: AVATAR.elena, text: "Top ! Je prends une raquette en prêt sur place 🎾", ago: 40 }
     ]
   },
   {
     id: "match-2",
     sportId: "football",
-    sportName: "Football Five",
-    sportIcon: "⚽",
+    title: "Foot à 5 entre potes",
     clubName: "Five Arena Rocourt",
-    courtName: "Terrain Synthétique 1",
-    date: "Demain",
-    time: "20:00 - 21:00",
-    levelRequired: "Tous niveaux bienvenus",
-    pricePerPerson: "8 €",
+    courtName: "Terrain synthétique 1",
+    city: "Liège",
+    day: 1, start: "20:00", durationMin: 60,
+    levelRequired: "Tous niveaux",
+    price: 8,
+    payment: "Paiement sur place ou via l'app",
+    courtBooked: true,
     totalSlots: 10,
-    bookedSlots: 9,
-    host: {
-      name: "Julien R.",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
-    },
+    outdoor: true,
+    amenities: ["balls", "showers", "parking"],
     players: [
-      { name: "Julien R." }, { name: "Nathan L." }, { name: "Maxime C." },
+      { name: "Julien R.", avatar: AVATAR.julien, mateId: "mate-3" },
+      { name: "Nathan L.", avatar: AVATAR.nathan, mateId: "mate-11" },
+      { name: "Maxime C.", avatar: AVATAR.maxime, mateId: "mate-5" },
       { name: "Sami B." }, { name: "Arnaud K." }, { name: "Mehdi T." },
-      { name: "Alex V." }, { name: "Cédric D." }, { name: "Bastien F." }
+      { name: "Alex V." }, { name: "Cédric D." }
+    ],
+    chat: [
+      { author: "Julien R.", avatar: AVATAR.julien, text: "On joue chasubles orange contre noires. Il nous manque encore 2 joueurs !", ago: 300 }
     ]
   },
   {
     id: "match-3",
     sportId: "tennis",
-    sportName: "Tennis",
-    sportIcon: "🎾",
+    title: "Simple en terre battue",
     clubName: "Royal Tennis Club de Liège",
-    courtName: "Court Terre Battue N°4",
-    date: "Samedi",
-    time: "10:30 - 12:00",
-    levelRequired: "Confirmé",
-    pricePerPerson: "12 €",
+    courtName: "Court terre battue n°4",
+    city: "Liège",
+    day: "sat", start: "10:30", durationMin: 90,
+    levelRequired: "Confirmé (Nv. 4)",
+    price: 12,
+    payment: "Paiement via l'app à la confirmation",
+    courtBooked: false,
     totalSlots: 2,
-    bookedSlots: 1,
-    host: {
-      name: "Camille D.",
-      avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80"
-    },
+    outdoor: true,
+    amenities: ["showers", "parking"],
     players: [
-      { name: "Camille D." }
+      { name: "Camille D.", avatar: AVATAR.camille, mateId: "mate-2" }
+    ],
+    chat: []
+  },
+  {
+    id: "match-4",
+    sportId: "basketball",
+    title: "3x3 sur le playground",
+    clubName: "Playground de la Boverie",
+    courtName: "Terrain public extérieur",
+    city: "Liège",
+    day: 0, start: "18:30", durationMin: 75,
+    levelRequired: "Tous niveaux",
+    price: 0,
+    payment: "Terrain public gratuit",
+    courtBooked: true,
+    totalSlots: 6,
+    outdoor: true,
+    amenities: ["balls"],
+    players: [
+      { name: "Maxime C.", avatar: AVATAR.maxime, mateId: "mate-5" },
+      { name: "Lucas S.", avatar: AVATAR.lucas, mateId: "mate-9" },
+      { name: "Yanis O." }, { name: "Hugo P." }
+    ],
+    chat: [
+      { author: "Maxime C.", avatar: AVATAR.maxime, text: "J'amène le ballon, on fait des équipes sur place 🏀", ago: 60 }
     ]
+  },
+  {
+    id: "match-5",
+    sportId: "running",
+    title: "Sortie 10 km tranquille",
+    clubName: "Bois de la Cambre",
+    courtName: "Départ : entrée avenue Louise",
+    city: "Bruxelles",
+    day: "sun", start: "08:30", durationMin: 60,
+    levelRequired: "Débutant à intermédiaire",
+    price: 0,
+    payment: "Gratuit",
+    courtBooked: true,
+    totalSlots: 8,
+    outdoor: true,
+    amenities: ["parking"],
+    players: [
+      { name: "Inès B.", avatar: AVATAR.ines, mateId: "mate-10" },
+      { name: "Camille D.", avatar: AVATAR.camille, mateId: "mate-2" },
+      { name: "Sofia R." }
+    ],
+    chat: [
+      { author: "Inès B.", avatar: AVATAR.ines, text: "Allure 6:00/km, personne n'est laissé derrière !", ago: 720 }
+    ]
+  },
+  {
+    id: "match-6",
+    sportId: "badminton",
+    title: "Double mixte",
+    clubName: "Hall omnisports de Jambes",
+    courtName: "Terrain 3",
+    city: "Namur",
+    day: 1, start: "19:00", durationMin: 60,
+    levelRequired: "Débutant (Nv. 1 - 2)",
+    price: 6,
+    payment: "Paiement sur place",
+    courtBooked: false,
+    totalSlots: 4,
+    outdoor: false,
+    amenities: ["racket", "showers", "parking"],
+    players: [
+      { name: "Sarah V.", avatar: AVATAR.sarah, mateId: "mate-4" },
+      { name: "Nathan L.", avatar: AVATAR.nathan, mateId: "mate-11" }
+    ],
+    chat: []
   }
 ];
+
+// Équipements / services sur place
+const AMENITIES = {
+  balls: { icon: "circle-dot", label: "Balles / ballon fournis" },
+  racket: { icon: "swords", label: "Prêt de raquette possible" },
+  showers: { icon: "shower-head", label: "Douches & vestiaires" },
+  parking: { icon: "car", label: "Parking gratuit" }
+};
+
+// Coordonnées pour la météo (Open-Meteo, sans clé)
+const CITY_COORDS = {
+  "liege": { lat: 50.6326, lon: 5.5797 },
+  "bruxelles": { lat: 50.8503, lon: 4.3517 },
+  "namur": { lat: 50.4674, lon: 4.8718 },
+  "charleroi": { lat: 50.4108, lon: 4.4446 }
+};
 
 // Profil de l'utilisateur connecté par défaut (éditable dans l'écran 6)
 const DEFAULT_MY_PROFILE = {
@@ -654,3 +759,130 @@ const DEFAULT_MY_PROFILE = {
     "Dimanche": ["matin"]
   }
 };
+
+// ---------------------------------------------------------------------------
+// Confiance, progression et succès des profils de démonstration
+// (bios locales, ponctualité, niveau Mates sur 5, 3 derniers matchs…)
+// ---------------------------------------------------------------------------
+const MATE_EXTRAS = {
+  "mate-1": {
+    bio: "Joue au padel à Belle-Île 2x/semaine, dispo après 18h. Je cherche un 4e régulier pour des parties rythmées, niveau 3-4.",
+    punctuality: 100, levelScore: 3.8, levelTrend: 0.2, matchesOrganized: 14, earlyMatches: 1, liveTonight: true,
+    recent: [
+      { sport: "Padel", result: "V", score: "6-4 6-3", when: "Mardi" },
+      { sport: "Padel", result: "V", score: "7-5 6-4", when: "Samedi" },
+      { sport: "Football", result: "D", score: "4-6", when: "Jeudi dernier" }
+    ]
+  },
+  "mate-2": {
+    bio: "Tennis au Royal Léopold et running au Bois de la Cambre. Je cherche une partenaire de simple niveau 4 pour le samedi matin.",
+    punctuality: 100, levelScore: 4.6, levelTrend: 0.1, matchesOrganized: 21, earlyMatches: 18, liveTonight: false,
+    recent: [
+      { sport: "Tennis", result: "V", score: "6-2 6-4", when: "Samedi" },
+      { sport: "Tennis", result: "V", score: "7-6 6-3", when: "Mercredi" },
+      { sport: "Tennis", result: "D", score: "4-6 6-7", when: "Dimanche dernier" }
+    ]
+  },
+  "mate-3": {
+    bio: "Gardien ou joueur de champ en foot à 5. Toujours chaud pour un match le mardi ou jeudi soir à Rocourt ou Angleur !",
+    punctuality: 98, levelScore: 3.9, levelTrend: -0.1, matchesOrganized: 32, earlyMatches: 0, liveTonight: true,
+    recent: [
+      { sport: "Football", result: "D", score: "7-9", when: "Jeudi" },
+      { sport: "Football", result: "V", score: "10-6", when: "Mardi" },
+      { sport: "Badminton", result: "V", score: "21-17 21-15", when: "Dimanche" }
+    ]
+  },
+  "mate-4": {
+    bio: "Grimpeuse au Grimpodrome de Namur, bloc et voie. Cherche un mate assureur pour progresser dans le 6b/6c le mercredi soir.",
+    punctuality: 100, levelScore: 4.0, levelTrend: 0.3, matchesOrganized: 6, earlyMatches: 3, liveTonight: false,
+    recent: [
+      { sport: "Escalade", result: "V", score: "6c enchaîné", when: "Mercredi" },
+      { sport: "Natation", result: "V", score: "1,5 km", when: "Lundi" },
+      { sport: "Escalade", result: "D", score: "6c+ tenté", when: "Samedi dernier" }
+    ]
+  },
+  "mate-5": {
+    bio: "Basket 3x3 au playground de la Boverie et squash à Cointe. Ambiance dynamique, zéro prise de tête, que du beau jeu.",
+    punctuality: 96, levelScore: 4.7, levelTrend: 0.0, matchesOrganized: 11, earlyMatches: 2, liveTonight: true,
+    recent: [
+      { sport: "Basket-ball", result: "V", score: "21-15", when: "Hier" },
+      { sport: "Squash", result: "V", score: "3-1", when: "Mardi" },
+      { sport: "Basket-ball", result: "D", score: "18-21", when: "Dimanche" }
+    ]
+  },
+  "mate-6": {
+    bio: "Padel niveau 4 en compétition au Country Hall et à Uccle. Je cherche des partenaires réguliers en semaine après 19h.",
+    punctuality: 100, levelScore: 4.4, levelTrend: 0.2, matchesOrganized: 9, earlyMatches: 0, liveTonight: false,
+    recent: [
+      { sport: "Padel", result: "V", score: "6-3 6-2", when: "Lundi" },
+      { sport: "Padel", result: "V", score: "6-4 7-5", when: "Vendredi" },
+      { sport: "Tennis", result: "V", score: "6-4 6-4", when: "Mercredi dernier" }
+    ]
+  },
+  "mate-7": {
+    bio: "Volley en club à Charleroi, beach-volley dès les premiers rayons à Marcinelle. Tournois amicaux le week-end bienvenus.",
+    punctuality: 97, levelScore: 4.1, levelTrend: -0.2, matchesOrganized: 4, earlyMatches: 1, liveTonight: false,
+    recent: [
+      { sport: "Volley-ball", result: "D", score: "1-3", when: "Samedi" },
+      { sport: "Volley-ball", result: "V", score: "3-2", when: "Mercredi" },
+      { sport: "Rugby", result: "D", score: "12-19", when: "Dimanche dernier" }
+    ]
+  },
+  "mate-8": {
+    bio: "Je reprends le sport en douceur : badminton au hall de Fléron et piscine de Jonfosse. Débutante motivée, on progresse ensemble ?",
+    punctuality: 100, levelScore: 1.8, levelTrend: 0.3, matchesOrganized: 1, earlyMatches: 6, liveTonight: false,
+    recent: [
+      { sport: "Badminton", result: "V", score: "21-18", when: "Mardi" },
+      { sport: "Badminton", result: "D", score: "15-21", when: "Samedi" },
+      { sport: "Running", result: "V", score: "5 km", when: "Jeudi dernier" }
+    ]
+  },
+  "mate-9": {
+    bio: "Ping-pong au club de Liège-Sud et squash à midi. Matchs rapides entre 12h et 14h ou après le boulot pour décompresser.",
+    punctuality: 99, levelScore: 4.8, levelTrend: 0.1, matchesOrganized: 7, earlyMatches: 0, liveTonight: false,
+    recent: [
+      { sport: "Tennis de table", result: "V", score: "3-0", when: "Hier" },
+      { sport: "Squash", result: "D", score: "2-3", when: "Lundi" },
+      { sport: "Tennis de table", result: "V", score: "3-1", when: "Jeudi dernier" }
+    ]
+  },
+  "mate-10": {
+    bio: "Handball en D2 à Schaerbeek, fractionné au parc du Cinquantenaire. Toujours partante pour une grosse session de groupe.",
+    punctuality: 100, levelScore: 4.3, levelTrend: 0.2, matchesOrganized: 16, earlyMatches: 9, liveTonight: true,
+    recent: [
+      { sport: "Handball", result: "V", score: "28-24", when: "Samedi" },
+      { sport: "Running", result: "V", score: "10 km", when: "Mercredi" },
+      { sport: "Handball", result: "D", score: "22-25", when: "Samedi dernier" }
+    ]
+  },
+  "mate-11": {
+    bio: "Padel au Namur Padel Center et foot à 5 à Jambes. J'adore les tournois du dimanche et rencontrer de nouveaux mates.",
+    punctuality: 98, levelScore: 3.4, levelTrend: 0.2, matchesOrganized: 5, earlyMatches: 2, liveTonight: false,
+    recent: [
+      { sport: "Padel", result: "V", score: "6-4 3-6 7-5", when: "Dimanche" },
+      { sport: "Football", result: "D", score: "5-7", when: "Jeudi" },
+      { sport: "Padel", result: "V", score: "6-2 6-4", when: "Mardi dernier" }
+    ]
+  },
+  "mate-12": {
+    bio: "Rugby au RFC Liège et padel le samedi matin à Belle-Île. Je privilégie le fair-play et les troisièmes mi-temps sympas.",
+    punctuality: 100, levelScore: 3.6, levelTrend: 0.1, matchesOrganized: 12, earlyMatches: 7, liveTonight: false,
+    recent: [
+      { sport: "Padel", result: "D", score: "4-6 5-7", when: "Samedi" },
+      { sport: "Rugby", result: "V", score: "24-17", when: "Dimanche" },
+      { sport: "Padel", result: "V", score: "6-3 6-4", when: "Samedi dernier" }
+    ]
+  }
+};
+INITIAL_MATES.forEach(mate => Object.assign(mate, MATE_EXTRAS[mate.id] || {}));
+
+// Statistiques du profil de démonstration (mode démo uniquement)
+Object.assign(DEFAULT_MY_PROFILE, {
+  punctuality: 100, levelScore: 3.5, levelTrend: 0.2, matchesOrganized: 4, earlyMatches: 5,
+  matchesThisMonth: 6, winRate: 64, hoursTotal: 38, weeklyMatches: [1, 2, 1, 3, 2, 2],
+  recent: [
+    { sport: "Football", result: "V", score: "8-5", when: "Mardi" },
+    { sport: "Padel", result: "D", score: "3-6 4-6", when: "Samedi" },
+    { sport: "Badminton", result: "V", score: "21-16 21-19", when: "Jeudi dernier" }
+  ]
+});

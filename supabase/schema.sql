@@ -16,9 +16,13 @@ create table if not exists public.profiles (
   avatar       text,
   sports       jsonb not null default '[]'::jsonb,
   availability jsonb not null default '{}'::jsonb,
+  live_until   timestamptz,               -- « Dispo pour jouer ce soir ⚡ »
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
+
+-- Projet déjà créé avec une ancienne version de ce fichier ? Cette ligne ajoute la colonne manquante.
+alter table public.profiles add column if not exists live_until timestamptz;
 
 -- 2. Sécurité : tout le monde peut LIRE les profils (page « Trouver un mate »),
 --    mais chacun ne peut MODIFIER que le sien.
