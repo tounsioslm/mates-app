@@ -371,7 +371,7 @@ const INITIAL_MATES = [
     city: "Bruxelles",
     distanceKm: 6.7,
     avatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=400&q=80",
-    bio: "Padel addict ! Niveau 4 sur Playtomic. Je cherche des partenaires pour des matchs réguliers en semaine sur Bruxelles ou Brabant Wallon.",
+    bio: "Padel addict ! Niveau 4 en compétition. Je cherche des partenaires pour des matchs réguliers en semaine sur Bruxelles ou Brabant Wallon.",
     sports: [
       { id: "padel", name: "Padel", level: "Expert", rating: 5 },
       { id: "tennis", name: "Tennis", level: "Confirmé", rating: 4 },

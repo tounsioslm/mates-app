@@ -64,6 +64,12 @@ Inspirée du modèle de Playtomic, mais ouverte à **tous les sports collectifs 
 
 ---
 
+## 🔐 Comptes utilisateurs
+
+Inscription, connexion et profils enregistrés en ligne grâce à **Supabase**. Voir [SUPABASE_SETUP.md](SUPABASE_SETUP.md) pour l'activer (5 minutes).
+
+---
+
 ## 🚀 Déploiement sur Render
 
 Consulte le fichier [DEPLOY_RENDER.md](file:///c:/Users/leila/Documents/Mates/DEPLOY_RENDER.md) pour héberger le site gratuitement en 3 minutes sur **Render**.

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mates. — Trouve tes partenaires de sport et réserve ton terrain</title>
-  <meta name="description" content="L'application tout-en-un qui facilite la pratique du sport amateur en groupe. Inspirée de Playtomic, trouvez des mates et réservez des terrains en quelques clics.">
+  <meta name="description" content="L'application tout-en-un qui facilite la pratique du sport amateur en groupe. Trouvez des mates et réservez des terrains en quelques clics.">
   
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="assets/logo-cropped.png">
@@ -94,7 +94,10 @@
       <a href="#mates" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Trouver un mate</a>
       <a href="#sports" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Les 14 Sports</a>
       <a href="#matches" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Matchs ouverts</a>
-      <a href="#auth" class="mobile-nav-link block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center mt-3">Connexion / Inscription</a>
+      <div id="mobile-auth-links" class="space-y-2 pt-3">
+        <a href="#auth/register" class="mobile-nav-link block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Créer mon profil</a>
+        <a href="#auth/login" class="mobile-nav-link block px-4 py-2 rounded-lg font-semibold border border-mates-border text-center">Se connecter</a>
+      </div>
     </div>
   </header>
 
@@ -132,7 +135,7 @@
               <!-- Description inspirée du pitch -->
               <p class="text-lg text-slate-300 max-w-2xl leading-relaxed">
                 L’application tout-en-un qui facilite la pratique du sport amateur en groupe. 
-                Inspirée du modèle de <strong>Playtomic</strong>, ouverte aux sports collectifs et de raquette 
+                Ouverte aux sports collectifs et de raquette
                 (padel, football, basket, tennis...). Trouve des partenaires de ton niveau et réserve en quelques clics.
               </p>
 
@@ -348,7 +351,7 @@
             <p class="text-slate-400 mt-2 text-sm">Découvre les profils de sportifs amateurs de ton niveau prêts à fouler le terrain.</p>
           </div>
           <div class="text-sm text-slate-400">
-            <span id="mates-count-badge" class="font-bold text-white">0</span> mates trouvés
+            <span id="mates-count-badge" class="font-bold text-white"><span class="inline-block w-5 h-3 align-middle rounded bg-slate-700 animate-pulse"></span></span> <span id="mates-count-label">mates trouvés</span>
           </div>
         </div>
 
@@ -387,7 +390,10 @@
                 Ville
               </label>
               <div class="relative">
-                <input type="text" id="filter-city" placeholder="Ex: Liège, Bruxelles..." class="w-full bg-mates-cardElevated border border-mates-border rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green transition-all placeholder:text-slate-500">
+                <select id="filter-city" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green transition-all">
+                  <option value="all">Toutes les villes</option>
+                  <!-- Rempli dynamiquement -->
+                </select>
                 <i data-lucide="map-pin" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
               </div>
             </div>
@@ -792,7 +798,8 @@
 
             <div>
               <label for="auth-password" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Mot de passe</label>
-              <input type="password" id="auth-password" required class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="••••••••">
+              <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="••••••••">
+              <p id="auth-password-hint" class="hidden text-[11px] text-slate-500 mt-1">6 caractères minimum.</p>
             </div>
 
             <!-- Bouton principal de connexion / inscription (Wireframe 7) -->
@@ -804,7 +811,7 @@
 
           <!-- Liens « Mot de passe oublié ? » et « Pas de compte ? S'inscrire » (Wireframe 7) -->
           <div class="space-y-3 text-center text-xs text-slate-400 pt-2 border-t border-mates-border">
-            <button type="button" onclick="MatesApp.showToast('Lien de réinitialisation envoyé par email fictif !')" class="hover:text-mates-green transition-colors">
+            <button type="button" id="auth-forgot-btn" onclick="MatesApp.handleForgotPassword()" class="hover:text-mates-green transition-colors">
               Mot de passe oublié ?
             </button>
             <div>
@@ -813,14 +820,6 @@
                 S'inscrire
               </button>
             </div>
-          </div>
-
-          <!-- Compte de démonstration rapide -->
-          <div class="p-3 bg-mates-cardElevated/50 rounded-xl border border-dashed border-mates-border text-center">
-            <button type="button" onclick="MatesApp.fillDemoAccount()" class="text-[11px] text-slate-400 hover:text-white flex items-center justify-center gap-1.5 mx-auto">
-              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-mates-green"></i>
-              <span>Cliquer ici pour pré-remplir un compte démo</span>
-            </button>
           </div>
 
         </div>
@@ -836,7 +835,7 @@
         
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-mates-border pb-6">
           <div>
-            <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Playtomic Experience</div>
+            <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Matchs en direct</div>
             <h1 class="text-3xl sm:text-4xl font-extrabold text-white">Matchs ouverts</h1>
             <p class="text-slate-400 mt-2 text-sm">Il manque 1 ou 2 joueurs pour compléter la partie. Réserve ta place et rejoins-les !</p>
           </div>
@@ -860,53 +859,64 @@
        ====================================================================== -->
   <footer class="bg-slate-950 border-t border-mates-border py-12 mt-16 text-slate-400 text-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-        
-        <!-- Info Projet -->
-        <div class="space-y-3 md:col-span-2">
-          <div class="flex items-center gap-2">
-            <img src="assets/logo-cropped.png" alt="Mates" class="h-7 w-auto object-contain">
-          </div>
-          <p class="text-xs text-slate-400 max-w-sm">
-            Mates est l'application tout-en-un qui facilite la pratique du sport amateur en groupe. 
-            Projet réalisé dans le cadre de l'UE04 - Analyse Informatique (HELMo).
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
+
+        <!-- Colonne 1 : Marque -->
+        <div class="col-span-2 md:col-span-1 space-y-4">
+          <img src="assets/logo-cropped.png" alt="Mates" class="h-7 w-auto object-contain">
+          <p class="text-xs text-slate-400 max-w-xs leading-relaxed">
+            Trouve ton mate, réserve ton terrain, joue. Le sport amateur en groupe, sans prise de tête.
           </p>
-          <div class="text-xs text-slate-500">
-            Design vert inspiré du logo officiel • Palette Volt (#C0FB18)
+          <div class="flex items-center gap-2">
+            <a href="#" onclick="return false" aria-label="Instagram" class="w-9 h-9 rounded-full border border-mates-border flex items-center justify-center hover:border-mates-green hover:text-mates-green transition-colors">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.5" fill="currentColor"/></svg>
+            </a>
+            <a href="#" onclick="return false" aria-label="Facebook" class="w-9 h-9 rounded-full border border-mates-border flex items-center justify-center hover:border-mates-green hover:text-mates-green transition-colors">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+            </a>
+            <a href="#" onclick="return false" aria-label="LinkedIn" class="w-9 h-9 rounded-full border border-mates-border flex items-center justify-center hover:border-mates-green hover:text-mates-green transition-colors">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+            </a>
           </div>
         </div>
 
-        <!-- Navigation Rapide -->
+        <!-- Colonne 2 : Navigation -->
         <div class="space-y-2">
-          <div class="text-xs font-bold text-white uppercase tracking-wider mb-2">Les 7 Écrans</div>
-          <ul class="space-y-1.5 text-xs">
-            <li><a href="#home" class="hover:text-mates-green transition-colors">1. Accueil</a></li>
-            <li><a href="#mates" class="hover:text-mates-green transition-colors">2. Recherche de mates</a></li>
-            <li><a href="#sports" class="hover:text-mates-green transition-colors">3. Liste des 14 sports</a></li>
-            <li><a href="#sport/padel" class="hover:text-mates-green transition-colors">4. Page d'un sport (Padel)</a></li>
-            <li><a href="#mate/mate-1" class="hover:text-mates-green transition-colors">5. Profil public</a></li>
-            <li><a href="#edit-profile" class="hover:text-mates-green transition-colors">6. Mon profil (édition)</a></li>
-            <li><a href="#auth" class="hover:text-mates-green transition-colors">7. Connexion / inscription</a></li>
+          <div class="text-xs font-bold text-white uppercase tracking-wider mb-3">Navigation</div>
+          <ul class="space-y-2 text-xs">
+            <li><a href="#home" class="hover:text-mates-green transition-colors">Accueil</a></li>
+            <li><a href="#mates" class="hover:text-mates-green transition-colors">Trouver un mate</a></li>
+            <li><a href="#sports" class="hover:text-mates-green transition-colors">Les 14 sports</a></li>
+            <li><a href="#matches" class="hover:text-mates-green transition-colors">Matchs ouverts</a></li>
           </ul>
         </div>
 
-        <!-- Analyse & Hébergement -->
+        <!-- Colonne 3 : Villes -->
         <div class="space-y-2">
-          <div class="text-xs font-bold text-white uppercase tracking-wider mb-2">Déploiement & Rendu</div>
-          <ul class="space-y-1.5 text-xs">
-            <li><span class="text-slate-400">Prêt pour hébergement <strong>Render</strong></span></li>
-            <li><span class="text-slate-400">Totalement réactif & persistant</span></li>
-            <li><span class="text-slate-500">HTML5 / Tailwind CSS / Vanilla JS</span></li>
+          <div class="text-xs font-bold text-white uppercase tracking-wider mb-3">Villes</div>
+          <ul class="space-y-2 text-xs">
+            <li><a href="#mates/Liège" class="hover:text-mates-green transition-colors">Padel & sport à Liège</a></li>
+            <li><a href="#mates/Bruxelles" class="hover:text-mates-green transition-colors">Padel & sport à Bruxelles</a></li>
+            <li><a href="#mates/Namur" class="hover:text-mates-green transition-colors">Padel & sport à Namur</a></li>
+          </ul>
+        </div>
+
+        <!-- Colonne 4 : Légal -->
+        <div class="space-y-2">
+          <div class="text-xs font-bold text-white uppercase tracking-wider mb-3">Légal</div>
+          <ul class="space-y-2 text-xs">
+            <li><a href="#" onclick="return false" class="hover:text-mates-green transition-colors">Mentions légales</a></li>
+            <li><a href="#" onclick="return false" class="hover:text-mates-green transition-colors">Politique de confidentialité</a></li>
+            <li><a href="#" onclick="return false" class="hover:text-mates-green transition-colors">CGU</a></li>
+            <li><a href="#" onclick="return false" class="hover:text-mates-green transition-colors">Contact</a></li>
           </ul>
         </div>
 
       </div>
 
-      <div class="pt-8 border-t border-mates-border/60 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-        <div>&copy; 2026 Mates. Tous droits réservés. Projet d'analyse informatique.</div>
-        <div class="flex items-center gap-4">
-          <span class="text-mates-green font-semibold">🟢 Hébergement Render Ready</span>
-        </div>
+      <div class="pt-6 border-t border-mates-border/60 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+        <div>&copy; 2026 Mates. Tous droits réservés.</div>
+        <div class="text-[11px] text-slate-600">Projet UE04 - Analyse Informatique (HELMo)</div>
       </div>
     </div>
   </footer>
@@ -922,7 +932,7 @@
       </button>
       
       <div class="space-y-2">
-        <div class="text-xs font-bold text-mates-green uppercase tracking-wider">Playtomic Booking</div>
+        <div class="text-xs font-bold text-mates-green uppercase tracking-wider">Réservation instantanée</div>
         <h3 id="modal-match-title" class="text-xl font-bold text-white">Rejoindre la partie</h3>
         <p id="modal-match-details" class="text-xs text-slate-400">Détails du match...</p>
       </div>
@@ -1010,6 +1020,8 @@
   <div id="toast-container"></div>
 
   <!-- Scripts Application -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/supabase-config.js"></script>
   <script src="js/data.js"></script>
   <script src="js/app.js"></script>
 </body>

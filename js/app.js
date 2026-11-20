@@ -9,6 +9,33 @@ const MatesApp = (() => {
   const STORAGE_KEY_AUTH = "mates_is_authenticated";
   const STORAGE_KEY_MATCHES = "mates_open_matches";
 
+  // Hash présent au chargement (retour d'un lien email / Google de Supabase)
+  const INITIAL_HASH = window.location.hash || "";
+
+  // Client Supabase (null => mode démo sans comptes réels)
+  const SB = (() => {
+    const cfg = typeof MATES_SUPABASE_CONFIG !== "undefined" ? MATES_SUPABASE_CONFIG : null;
+    if (!cfg || !cfg.url || !cfg.anonKey) return null;
+    if (!window.supabase || !window.supabase.createClient) {
+      console.warn("Librairie Supabase non chargée : mode démo.");
+      return null;
+    }
+    try {
+      return window.supabase.createClient(cfg.url, cfg.anonKey);
+    } catch (e) {
+      console.warn("Configuration Supabase invalide :", e);
+      return null;
+    }
+  })();
+  const GOOGLE_ENABLED = !!(SB && MATES_SUPABASE_CONFIG.googleEnabled);
+
+  const LEVELS = ["Débutant", "Intermédiaire", "Confirmé", "Expert"];
+  const FEATURED_CITIES = ["Liège", "Bruxelles", "Namur"];
+  const DEFAULT_AVATAR = "data:image/svg+xml;utf8," + encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='#1B2438'/>" +
+    "<circle cx='50' cy='38' r='18' fill='#C0FB18'/><path d='M16 92c4-20 18-30 34-30s30 10 34 30' fill='#C0FB18'/></svg>"
+  );
+
   // État local de l'application
   let state = {
     currentRoute: "home",
@@ -21,8 +48,11 @@ const MatesApp = (() => {
     filters: {
       sport: "all",
       level: "all",
-      city: ""
+      city: "all"
     },
+    // Profils des vrais inscrits (Supabase)
+    remoteMates: [],
+    sessionReady: !SB,
     // Données temporaires d'édition du profil
     editingProfile: null,
     pendingJoinMatchId: null,
@@ -39,6 +69,186 @@ const MatesApp = (() => {
     renderAllViews();
     handleHashChange();
     lucide.createIcons();
+    if (SB) initSupabaseSession();
+  }
+
+  /* ==========================================================================
+     COMPTES UTILISATEURS (Supabase)
+     ========================================================================== */
+  function cleanText(value, max) {
+    return String(value == null ? "" : value).replace(/[<>"`]/g, "").trim().slice(0, max);
+  }
+
+  function cleanAvatar(value) {
+    return typeof value === "string" && /^https:\/\/[^\s"'<>`]+$/.test(value) ? value : DEFAULT_AVATAR;
+  }
+
+  function levelToRating(level) {
+    return level === "Expert" ? 5 : level === "Confirmé" ? 4 : level === "Intermédiaire" ? 3 : 2;
+  }
+
+  function cleanSports(list) {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    return list.map(s => {
+      const meta = INITIAL_SPORTS.find(sp => sp.id === (s && s.id));
+      if (!meta || seen.has(meta.id)) return null;
+      seen.add(meta.id);
+      const level = LEVELS.includes(s.level) ? s.level : "Débutant";
+      return { id: meta.id, name: meta.name, level, rating: levelToRating(level) };
+    }).filter(Boolean);
+  }
+
+  function cleanAvailability(av) {
+    const out = {};
+    if (!av || typeof av !== "object") return out;
+    DAYS_OF_WEEK.forEach(day => {
+      if (Array.isArray(av[day])) {
+        out[day] = av[day].filter(slot => TIME_SLOTS.some(t => t.id === slot));
+      }
+    });
+    return out;
+  }
+
+  // Convertit une ligne de la table "profiles" en objet "mate" utilisé par l'interface
+  function profileFromRow(row, isMe) {
+    return {
+      id: isMe ? "my-profile" : "user-" + row.id,
+      userId: row.id,
+      firstName: cleanText(row.first_name, 40) || "Sportif",
+      lastName: cleanText(row.last_name, 40),
+      age: Number.isInteger(row.age) ? row.age : null,
+      city: cleanText(row.city, 60),
+      distanceKm: null,
+      avatar: cleanAvatar(row.avatar),
+      bio: cleanText(row.bio, 400),
+      sports: cleanSports(row.sports),
+      availability: cleanAvailability(row.availability),
+      matchesPlayed: 0,
+      fairPlayScore: null,
+      isNew: true
+    };
+  }
+
+  function getAllMates() {
+    return state.remoteMates.concat(INITIAL_MATES);
+  }
+
+  function siteUrl() {
+    return window.location.origin + window.location.pathname;
+  }
+
+  async function initSupabaseSession() {
+    try {
+      const { data } = await SB.auth.getSession();
+      if (data && data.session) {
+        await applySession(data.session);
+      }
+    } catch (e) {
+      console.warn("Session Supabase indisponible :", e);
+    }
+    await loadRemoteMates();
+    state.sessionReady = true;
+
+    const fromRecovery = INITIAL_HASH.includes("type=recovery");
+    const fromAuthLink = INITIAL_HASH.includes("access_token=");
+    const linkError = INITIAL_HASH.includes("error_description=");
+
+    if (linkError) {
+      showToast("Ce lien a expiré ou n'est plus valide. Réessaie depuis la page de connexion.", "warning");
+      window.location.hash = "#auth/login";
+    } else if (fromRecovery && state.isAuthenticated) {
+      window.location.hash = "#edit-profile";
+      setTimeout(promptNewPassword, 400);
+    } else if (fromAuthLink && state.isAuthenticated) {
+      showToast(`Bienvenue sur Mates, ${state.userProfile.firstName} !`, "success");
+      goAfterLogin();
+    } else {
+      handleHashChange();
+    }
+  }
+
+  async function applySession(session) {
+    const user = session.user;
+    const { data: row, error } = await SB.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    if (error) console.warn("Lecture du profil impossible :", error.message);
+
+    let profileRow = row;
+    if (!profileRow) {
+      // Profil absent (ex : 1re connexion Google) -> on le crée
+      const meta = user.user_metadata || {};
+      const fullName = (meta.full_name || meta.name || "").split(" ");
+      profileRow = {
+        id: user.id,
+        first_name: cleanText(meta.first_name || fullName[0], 40),
+        last_name: cleanText(meta.last_name || fullName.slice(1).join(" "), 40),
+        avatar: typeof meta.avatar_url === "string" ? meta.avatar_url : null
+      };
+      const { error: upsertError } = await SB.from("profiles").upsert(profileRow);
+      if (upsertError) console.warn("Création du profil impossible :", upsertError.message);
+    }
+
+    state.userProfile = profileFromRow(profileRow, true);
+    state.userProfile.email = user.email;
+    state.isAuthenticated = true;
+    renderHeaderUserSection();
+  }
+
+  async function loadRemoteMates() {
+    if (!SB) return;
+    const { data, error } = await SB.from("profiles")
+      .select("*")
+      .neq("first_name", "")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      console.warn("Profils Supabase indisponibles :", error.message);
+      return;
+    }
+    const myId = state.userProfile && state.userProfile.userId;
+    state.remoteMates = (data || [])
+      .filter(row => row.id !== myId)
+      .map(row => profileFromRow(row, false));
+    populateCityDropdown();
+    renderMatesGrid();
+  }
+
+  function goAfterLogin() {
+    const p = state.userProfile;
+    const incomplete = !p || !p.city || p.sports.length === 0;
+    window.location.hash = incomplete ? "#edit-profile" : "#mates";
+  }
+
+  function translateAuthError(err) {
+    const m = String((err && err.message) || "").toLowerCase();
+    console.warn("Erreur d'authentification :", err);
+    if (m.includes("invalid login")) return "Email ou mot de passe incorrect.";
+    if (m.includes("already registered") || m.includes("already been registered")) return "Un compte existe déjà avec cet email. Connecte-toi !";
+    if (m.includes("email not confirmed")) return "Confirme d'abord ton email (regarde ta boîte de réception).";
+    if (m.includes("rate limit") || m.includes("security purposes")) return "Trop de tentatives, réessaie dans une minute.";
+    if (m.includes("password")) return "Le mot de passe doit contenir au moins 6 caractères.";
+    if (m.includes("email")) return "Adresse email invalide.";
+    if (m.includes("fetch") || m.includes("network")) return "Serveur injoignable. Vérifie ta connexion internet.";
+    return "Une erreur est survenue, réessaie.";
+  }
+
+  function requireAuth(message) {
+    if (state.isAuthenticated && state.userProfile) return true;
+    showToast(message || "Connecte-toi pour continuer.", "info");
+    window.location.hash = "#auth/login";
+    return false;
+  }
+
+  async function promptNewPassword() {
+    const pwd = prompt("Choisis ton nouveau mot de passe (6 caractères minimum) :");
+    if (!pwd) return;
+    if (pwd.length < 6) {
+      showToast("6 caractères minimum, réessaie.", "warning");
+      return promptNewPassword();
+    }
+    const { error } = await SB.auth.updateUser({ password: pwd });
+    if (error) showToast(translateAuthError(error), "warning");
+    else showToast("Mot de passe modifié !", "success");
   }
 
   /**
@@ -61,6 +271,12 @@ const MatesApp = (() => {
     // Authentification
     const savedAuth = localStorage.getItem(STORAGE_KEY_AUTH);
     state.isAuthenticated = savedAuth !== null ? savedAuth === "true" : true;
+
+    // Avec Supabase : personne n'est connecté tant que la session n'est pas vérifiée
+    if (SB) {
+      state.isAuthenticated = false;
+      state.userProfile = null;
+    }
 
     // Matchs ouverts
     const savedMatches = localStorage.getItem(STORAGE_KEY_MATCHES);
@@ -87,7 +303,8 @@ const MatesApp = (() => {
     const rawHash = window.location.hash.replace("#", "") || "home";
     const parts = rawHash.split("/");
     const mainView = parts[0];
-    const param = parts[1] || null;
+    let param = parts[1] || null;
+    try { if (param) param = decodeURIComponent(param); } catch (e) { /* hash mal formé */ }
 
     state.currentRoute = mainView;
 
@@ -107,6 +324,11 @@ const MatesApp = (() => {
         break;
 
       case "mates":
+        if (param) {
+          state.filters.city = findCityOption(param) || "all";
+          const citySelect = document.getElementById("filter-city");
+          if (citySelect) citySelect.value = state.filters.city;
+        }
         showView("view-mates");
         renderMatesGrid();
         break;
@@ -129,6 +351,7 @@ const MatesApp = (() => {
         break;
 
       case "edit-profile":
+        if (!state.sessionReady) return; // session en cours de vérification
         if (!state.isAuthenticated) {
           window.location.hash = "#auth";
           showToast("Veuillez vous connecter pour modifier votre profil.", "info");
@@ -139,6 +362,11 @@ const MatesApp = (() => {
         break;
 
       case "auth":
+        if (state.sessionReady && state.isAuthenticated && SB) {
+          window.location.hash = "#edit-profile";
+          return;
+        }
+        if (param === "register" || param === "login") state.authMode = param;
         showView("view-auth");
         updateAuthCard();
         break;
@@ -198,12 +426,24 @@ const MatesApp = (() => {
       `;
     } else {
       container.innerHTML = `
-        <a href="#auth" class="btn-neon text-xs py-2 px-4 shadow-sm">
-          <i data-lucide="log-in" class="w-4 h-4"></i>
-          <span>Connexion</span>
+        <a href="#auth/login" class="hidden sm:inline-flex text-xs font-semibold text-slate-300 hover:text-white px-3 py-2 transition-colors">
+          Se connecter
+        </a>
+        <a href="#auth/register" class="btn-neon text-xs py-2 px-4 shadow-sm">
+          <i data-lucide="user-plus" class="w-4 h-4"></i>
+          <span>Créer mon profil</span>
         </a>
       `;
     }
+
+    const mobileAuth = document.getElementById("mobile-auth-links");
+    if (mobileAuth) {
+      mobileAuth.innerHTML = state.isAuthenticated && state.userProfile
+        ? `<a href="#edit-profile" class="block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Mon profil</a>`
+        : `<a href="#auth/register" class="block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Créer mon profil</a>
+           <a href="#auth/login" class="block px-4 py-2 rounded-lg font-semibold border border-mates-border text-center">Se connecter</a>`;
+    }
+    if (window.lucide) lucide.createIcons({ root: container });
   }
 
   /**
@@ -217,8 +457,8 @@ const MatesApp = (() => {
       mobileBtn.addEventListener("click", () => {
         mobileDrawer.classList.toggle("hidden");
       });
-      document.querySelectorAll(".mobile-nav-link").forEach(link => {
-        link.addEventListener("click", () => mobileDrawer.classList.add("hidden"));
+      mobileDrawer.addEventListener("click", (e) => {
+        if (e.target.closest("a")) mobileDrawer.classList.add("hidden");
       });
     }
 
@@ -243,8 +483,8 @@ const MatesApp = (() => {
     }
 
     if (cityInput) {
-      cityInput.addEventListener("input", (e) => {
-        state.filters.city = e.target.value.trim().toLowerCase();
+      cityInput.addEventListener("change", (e) => {
+        state.filters.city = e.target.value;
         renderMatesGrid();
       });
     }
@@ -268,6 +508,7 @@ const MatesApp = (() => {
   function renderAllViews() {
     renderHomeSportsGrid();
     populateSportDropdowns();
+    populateCityDropdown();
     renderMatesGrid();
     renderSportsCatalog();
     renderOpenMatches();
@@ -291,6 +532,37 @@ const MatesApp = (() => {
     if (proposeSportSelect) {
       proposeSportSelect.innerHTML = optionsHtml;
     }
+  }
+
+  // "Liège (Centre)", "liege", "LIÈGE" -> "liege"
+  function normalizeCity(city) {
+    return String(city || "").split("(")[0].trim().toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function getCityOptions() {
+    const byKey = new Map();
+    FEATURED_CITIES.concat(getAllMates().map(m => m.city)).forEach(city => {
+      const key = normalizeCity(city);
+      if (key && !byKey.has(key)) byKey.set(key, cleanText(city.split("(")[0], 60));
+    });
+    const rest = [...byKey.values()].filter(c => !FEATURED_CITIES.includes(c)).sort((a, b) => a.localeCompare(b, "fr"));
+    return FEATURED_CITIES.concat(rest);
+  }
+
+  function findCityOption(city) {
+    const key = normalizeCity(city);
+    return getCityOptions().find(c => normalizeCity(c) === key) || null;
+  }
+
+  function populateCityDropdown() {
+    const select = document.getElementById("filter-city");
+    if (!select) return;
+    const cities = getCityOptions();
+    select.innerHTML = `<option value="all">Toutes les villes</option>` +
+      cities.map(c => `<option value="${c}">${c}</option>`).join("");
+    if (state.filters.city !== "all" && !cities.includes(state.filters.city)) state.filters.city = "all";
+    select.value = state.filters.city;
   }
 
   /* ==========================================================================
@@ -319,7 +591,7 @@ const MatesApp = (() => {
     if (!container) return;
 
     // Filtrage des mates
-    const filtered = INITIAL_MATES.filter(mate => {
+    const filtered = getAllMates().filter(mate => {
       // Filtre Sport
       if (state.filters.sport !== "all") {
         const hasSport = mate.sports.some(s => s.id === state.filters.sport);
@@ -331,8 +603,8 @@ const MatesApp = (() => {
         if (!hasLevel) return false;
       }
       // Filtre Ville
-      if (state.filters.city) {
-        if (!mate.city.toLowerCase().includes(state.filters.city)) {
+      if (state.filters.city !== "all") {
+        if (normalizeCity(mate.city) !== normalizeCity(state.filters.city)) {
           return false;
         }
       }
@@ -342,6 +614,8 @@ const MatesApp = (() => {
     if (countBadge) {
       countBadge.textContent = filtered.length;
     }
+    const countLabel = document.getElementById("mates-count-label");
+    if (countLabel) countLabel.textContent = filtered.length > 1 ? "mates trouvés" : "mate trouvé";
 
     if (filtered.length === 0) {
       container.innerHTML = "";
@@ -372,19 +646,19 @@ const MatesApp = (() => {
               </a>
               <div class="overflow-hidden">
                 <a href="#mate/${mate.id}" class="text-lg font-bold text-white group-hover:text-mates-green transition-colors flex items-center gap-1.5">
-                  <span>${mate.firstName}, ${mate.age} ans</span>
+                  <span>${mate.firstName}${mate.age ? `, ${mate.age} ans` : ""}</span>
                   <i data-lucide="badge-check" class="w-4 h-4 text-mates-green flex-shrink-0"></i>
                 </a>
                 <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
                   <i data-lucide="map-pin" class="w-3.5 h-3.5 text-mates-green"></i>
-                  <span>${mate.city} • à ${mate.distanceKm} km</span>
+                  <span>${mate.city || "Ville non renseignée"}${mate.distanceKm != null ? ` • à ${mate.distanceKm} km` : ""}</span>
                 </div>
               </div>
             </div>
 
             <!-- Bio -->
             <p class="text-xs text-slate-300 leading-relaxed mb-4 line-clamp-2">
-              "${mate.bio}"
+              ${mate.bio ? `"${mate.bio}"` : `<span class="italic text-slate-500">Nouveau sur Mates !</span>`}
             </p>
 
             <!-- Sports + niveau (Wireframe 2) -->
@@ -415,13 +689,13 @@ const MatesApp = (() => {
   }
 
   function resetFilters() {
-    state.filters = { sport: "all", level: "all", city: "" };
+    state.filters = { sport: "all", level: "all", city: "all" };
     const s = document.getElementById("filter-sport");
     const l = document.getElementById("filter-level");
     const c = document.getElementById("filter-city");
     if (s) s.value = "all";
     if (l) l.value = "all";
-    if (c) c.value = "";
+    if (c) c.value = "all";
     renderMatesGrid();
     showToast("Filtres réinitialisés.", "info");
   }
@@ -547,7 +821,7 @@ const MatesApp = (() => {
     // Grille de cartes mates filtrées sur ce sport (Wireframe 4)
     const matesGrid = document.getElementById("sport-mates-grid");
     if (matesGrid) {
-      const sportMates = INITIAL_MATES.filter(m => m.sports.some(s => s.id === sport.id));
+      const sportMates = getAllMates().filter(m => m.sports.some(s => s.id === sport.id));
       
       if (sportMates.length === 0) {
         matesGrid.innerHTML = `
@@ -571,7 +845,7 @@ const MatesApp = (() => {
                     </a>
                     <div class="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                       <i data-lucide="map-pin" class="w-3 h-3 text-mates-green"></i>
-                      <span>${mate.city} • à ${mate.distanceKm} km</span>
+                      <span>${mate.city || "Ville non renseignée"}${mate.distanceKm != null ? ` • à ${mate.distanceKm} km` : ""}</span>
                     </div>
                   </div>
                 </div>
@@ -659,10 +933,10 @@ const MatesApp = (() => {
      5. ÉCRAN PROFIL PUBLIC (Wireframe 5)
      ========================================================================== */
   function renderPublicProfile(mateId) {
-    let mate = INITIAL_MATES.find(m => m.id === mateId);
+    let mate = getAllMates().find(m => m.id === mateId);
 
     // Si on regarde notre propre profil public
-    if (mateId === "my-profile" || mateId === "me") {
+    if ((mateId === "my-profile" || mateId === "me") && state.userProfile) {
       mate = state.userProfile;
     }
 
@@ -680,7 +954,7 @@ const MatesApp = (() => {
           <div class="relative flex-shrink-0">
             <img src="${mate.avatar}" alt="${mate.firstName}" class="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl object-cover ring-4 ring-mates-border shadow-2xl">
             <span class="absolute -bottom-2 -right-2 px-3 py-1 bg-mates-green text-black font-extrabold text-xs rounded-full shadow-lg">
-              ${mate.reliability || '100%'} Fiable
+              ${mate.isNew ? "Nouveau" : `${mate.reliability || '100%'} Fiable`}
             </span>
           </div>
 
@@ -692,10 +966,9 @@ const MatesApp = (() => {
                   <i data-lucide="badge-check" class="w-6 h-6 text-mates-green"></i>
                 </h1>
                 <div class="text-sm text-slate-400 flex items-center justify-center sm:justify-start gap-2 mt-1">
-                  <span>${mate.age} ans</span>
-                  <span>•</span>
+                  ${mate.age ? `<span>${mate.age} ans</span><span>•</span>` : ""}
                   <i data-lucide="map-pin" class="w-4 h-4 text-mates-green"></i>
-                  <span>${mate.city} ${mate.distanceKm ? `(à ${mate.distanceKm} km)` : ''}</span>
+                  <span>${mate.city || "Ville non renseignée"} ${mate.distanceKm ? `(à ${mate.distanceKm} km)` : ''}</span>
                 </div>
               </div>
 
@@ -708,13 +981,13 @@ const MatesApp = (() => {
 
             <!-- Bio -->
             <p class="text-sm text-slate-300 leading-relaxed max-w-2xl bg-mates-cardElevated/40 p-4 rounded-2xl border border-mates-border">
-              "${mate.bio}"
+              ${mate.bio ? `"${mate.bio}"` : `<span class="italic text-slate-500">Pas encore de bio.</span>`}
             </p>
 
             <!-- Stats -->
             <div class="flex flex-wrap items-center justify-center sm:justify-start gap-6 pt-2 text-xs text-slate-400">
-              <div><strong class="text-white text-sm">${mate.matchesPlayed || 12}</strong> matchs joués</div>
-              <div><strong class="text-mates-green text-sm">★ ${mate.fairPlayScore || 5.0}</strong> note fair-play</div>
+              <div><strong class="text-white text-sm">${mate.matchesPlayed ?? 0}</strong> matchs joués</div>
+              <div><strong class="text-mates-green text-sm">${mate.fairPlayScore ? `★ ${mate.fairPlayScore}` : "–"}</strong> note fair-play</div>
               <div><strong class="text-white text-sm">${mate.sports.length}</strong> sports pratiqués</div>
             </div>
           </div>
@@ -814,10 +1087,10 @@ const MatesApp = (() => {
 
     if (fn) fn.value = p.firstName || "";
     if (ln) ln.value = p.lastName || "";
-    if (age) age.value = p.age || 20;
-    if (city) city.value = p.city || "Liège";
+    if (age) age.value = p.age || "";
+    if (city) city.value = p.city || "";
     if (bio) bio.value = p.bio || "";
-    if (avatarPreview) avatarPreview.src = p.avatar || DEFAULT_MY_PROFILE.avatar;
+    if (avatarPreview) avatarPreview.src = p.avatar || DEFAULT_AVATAR;
     if (avatarUrl) avatarUrl.value = p.avatar || "";
 
     renderEditSportsList();
@@ -942,8 +1215,8 @@ const MatesApp = (() => {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           // Simulation précise pour la région liégeoise / belge
-          cityInput.value = "Liège (Centre)";
-          showToast("Position GPS détectée : Liège (Centre) !", "success");
+          cityInput.value = "Liège";
+          showToast("Position GPS détectée : Liège !", "success");
         },
         (err) => {
           // Fallback en cas de refus ou sandbox
@@ -961,6 +1234,10 @@ const MatesApp = (() => {
   function triggerAvatarChange() {
     const newUrl = prompt("Saisissez l'URL de votre photo de profil :", state.editingProfile.avatar);
     if (newUrl && newUrl.trim()) {
+      if (SB && cleanAvatar(newUrl.trim()) === DEFAULT_AVATAR) {
+        showToast("L'adresse de la photo doit commencer par https://", "warning");
+        return;
+      }
       state.editingProfile.avatar = newUrl.trim();
       const preview = document.getElementById("edit-avatar-preview");
       if (preview) preview.src = newUrl.trim();
@@ -968,7 +1245,7 @@ const MatesApp = (() => {
     }
   }
 
-  function saveProfile(event) {
+  async function saveProfile(event) {
     if (event) event.preventDefault();
 
     const fn = document.getElementById("edit-firstname").value.trim();
@@ -988,6 +1265,37 @@ const MatesApp = (() => {
     state.editingProfile.city = city;
     state.editingProfile.bio = bio;
 
+    // Comptes réels : enregistrement dans Supabase
+    if (SB && state.userProfile && state.userProfile.userId) {
+      const p = state.editingProfile;
+      const row = {
+        id: state.userProfile.userId,
+        first_name: cleanText(fn, 40),
+        last_name: cleanText(ln, 40),
+        age: Number.isInteger(age) && age >= 13 && age <= 99 ? age : null,
+        city: cleanText(findCityOption(city) || city.split("(")[0], 60),
+        bio: cleanText(bio, 400),
+        avatar: cleanAvatar(p.avatar) === DEFAULT_AVATAR ? null : p.avatar,
+        sports: cleanSports(p.sports),
+        availability: cleanAvailability(p.availability),
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await SB.from("profiles").upsert(row);
+      if (error) {
+        console.warn("Enregistrement du profil impossible :", error.message);
+        showToast("Impossible d'enregistrer le profil, réessaie.", "warning");
+        return;
+      }
+      const email = state.userProfile.email;
+      state.userProfile = profileFromRow(row, true);
+      state.userProfile.email = email;
+      populateCityDropdown();
+      renderHeaderUserSection();
+      showToast("Profil enregistré avec succès !", "success");
+      setTimeout(() => { window.location.hash = "#mate/my-profile"; }, 800);
+      return;
+    }
+
     // Enregistrement dans le state et LocalStorage
     state.userProfile = JSON.parse(JSON.stringify(state.editingProfile));
     localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(state.userProfile));
@@ -1005,7 +1313,17 @@ const MatesApp = (() => {
     window.location.hash = "#mate/my-profile";
   }
 
-  function logout() {
+  async function logout() {
+    if (SB) {
+      await SB.auth.signOut();
+      state.userProfile = null;
+      state.isAuthenticated = false;
+      renderHeaderUserSection();
+      showToast("Tu es déconnecté. À bientôt sur le terrain !", "info");
+      window.location.hash = "#home";
+      loadRemoteMates();
+      return;
+    }
     state.isAuthenticated = false;
     localStorage.setItem(STORAGE_KEY_AUTH, "false");
     renderHeaderUserSection();
@@ -1028,6 +1346,13 @@ const MatesApp = (() => {
     const submitBtn = document.getElementById("auth-submit-btn");
     const toggleQuestion = document.getElementById("auth-toggle-question");
     const toggleBtn = document.getElementById("auth-toggle-btn");
+    const pwdInput = document.getElementById("auth-password");
+    const pwdHint = document.getElementById("auth-password-hint");
+    const forgotBtn = document.getElementById("auth-forgot-btn");
+    const isRegister = state.authMode === "register";
+    if (pwdInput) pwdInput.setAttribute("autocomplete", isRegister ? "new-password" : "current-password");
+    if (pwdHint) pwdHint.classList.toggle("hidden", !isRegister);
+    if (forgotBtn) forgotBtn.classList.toggle("hidden", isRegister);
 
     if (state.authMode === "register") {
       if (title) title.textContent = "Inscription sur Mates";
@@ -1047,15 +1372,33 @@ const MatesApp = (() => {
     lucide.createIcons();
   }
 
-  function handleGoogleAuth() {
+  async function handleGoogleAuth() {
+    if (SB) {
+      if (!GOOGLE_ENABLED) {
+        showToast("La connexion Google arrive bientôt. Utilise ton email en attendant !", "info");
+        return;
+      }
+      const { error } = await SB.auth.signInWithOAuth({ provider: "google", options: { redirectTo: siteUrl() } });
+      if (error) showToast(translateAuthError(error), "warning");
+      return;
+    }
     showToast("Connexion Google simulée...", "info");
     setTimeout(() => {
       loginSuccess("Alexandre", "Deville", "alex.deville@etudiant.helmo.be");
     }, 600);
   }
 
-  function handleAuthSubmit(e) {
+  function setAuthLoading(isLoading) {
+    const btn = document.getElementById("auth-submit-btn");
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.classList.toggle("opacity-60", isLoading);
+    btn.classList.toggle("pointer-events-none", isLoading);
+  }
+
+  async function handleAuthSubmit(e) {
     if (e) e.preventDefault();
+    if (SB) return handleSupabaseAuthSubmit();
     const email = document.getElementById("auth-email").value.trim();
     const fn = state.authMode === "register" ? (document.getElementById("auth-firstname").value.trim() || "Nouveau") : "Alexandre";
     const ln = state.authMode === "register" ? (document.getElementById("auth-lastname").value.trim() || "Joueur") : "Deville";
@@ -1068,12 +1411,86 @@ const MatesApp = (() => {
     loginSuccess(fn, ln, email);
   }
 
-  function fillDemoAccount() {
-    const email = document.getElementById("auth-email");
-    const pwd = document.getElementById("auth-password");
-    if (email) email.value = "alex.deville@etudiant.helmo.be";
-    if (pwd) pwd.value = "••••••••";
-    showToast("Coordonnées de test pré-remplies !", "info");
+  async function handleSupabaseAuthSubmit() {
+    const emailInput = document.getElementById("auth-email");
+    const pwdInput = document.getElementById("auth-password");
+    const email = emailInput.value.trim();
+    const password = pwdInput.value;
+
+    if (!email) {
+      showToast("Saisis ton adresse email.", "warning");
+      return;
+    }
+    if (password.length < 6) {
+      showToast("Le mot de passe doit contenir au moins 6 caractères.", "warning");
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      if (state.authMode === "register") {
+        const firstName = cleanText(document.getElementById("auth-firstname").value, 40);
+        const lastName = cleanText(document.getElementById("auth-lastname").value, 40);
+        if (!firstName) {
+          showToast("Indique ton prénom.", "warning");
+          return;
+        }
+
+        const { data, error } = await SB.auth.signUp({
+          email,
+          password,
+          options: { data: { first_name: firstName, last_name: lastName }, emailRedirectTo: siteUrl() }
+        });
+        if (error) throw error;
+        // Email déjà utilisé (Supabase ne renvoie pas d'erreur pour ne pas le révéler)
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          throw { message: "User already registered" };
+        }
+        pwdInput.value = "";
+
+        if (!data.session) {
+          // Confirmation par email activée dans Supabase
+          state.authMode = "login";
+          updateAuthCard();
+          showToast("Compte créé ! Clique sur le lien reçu par email pour l'activer.", "success");
+          return;
+        }
+
+        await applySession(data.session);
+        await loadRemoteMates();
+        showToast(`Bienvenue sur Mates, ${state.userProfile.firstName} ! Complète ton profil.`, "success");
+        window.location.hash = "#edit-profile";
+      } else {
+        const { data, error } = await SB.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        pwdInput.value = "";
+        await applySession(data.session);
+        await loadRemoteMates();
+        showToast(`Content de te revoir, ${state.userProfile.firstName} !`, "success");
+        goAfterLogin();
+      }
+    } catch (err) {
+      showToast(translateAuthError(err), "warning");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!SB) {
+      showToast("Lien de réinitialisation envoyé (mode démo).", "info");
+      return;
+    }
+    const emailInput = document.getElementById("auth-email");
+    const email = emailInput ? emailInput.value.trim() : "";
+    if (!email) {
+      showToast("Saisis ton email ci-dessus, puis clique à nouveau sur « Mot de passe oublié ? ».", "info");
+      if (emailInput) emailInput.focus();
+      return;
+    }
+    const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: siteUrl() });
+    if (error) showToast(translateAuthError(error), "warning");
+    else showToast("Si un compte existe, un lien de réinitialisation vient d'être envoyé.", "success");
   }
 
   function loginSuccess(firstName, lastName, email) {
@@ -1169,6 +1586,7 @@ const MatesApp = (() => {
   }
 
   function openJoinModal(matchId) {
+    if (!requireAuth("Connecte-toi pour rejoindre un match.")) return;
     const match = state.matches.find(m => m.id === matchId) || state.matches[0];
     state.pendingJoinMatchId = match.id;
 
@@ -1205,7 +1623,8 @@ const MatesApp = (() => {
   }
 
   function openProposeMatchModal(mateId) {
-    const mate = INITIAL_MATES.find(m => m.id === mateId);
+    if (!requireAuth("Connecte-toi pour proposer une partie.")) return;
+    const mate = getAllMates().find(m => m.id === mateId);
     if (!mate) return;
 
     state.pendingProposeMateId = mate.id;
@@ -1217,7 +1636,11 @@ const MatesApp = (() => {
     // Mettre les sports de ce mate en suggestion
     const sportSelect = document.getElementById("propose-sport-select");
     if (sportSelect) {
-      sportSelect.innerHTML = mate.sports.map(s => `<option value="${s.id}">🎾 ${s.name} (${s.level})</option>`).join("");
+      const sportsForMatch = mate.sports.length ? mate.sports : INITIAL_SPORTS.map(sp => ({ id: sp.id, name: sp.name, level: "Tous niveaux" }));
+      sportSelect.innerHTML = sportsForMatch.map(s => {
+        const meta = INITIAL_SPORTS.find(sp => sp.id === s.id) || { icon: "🏅" };
+        return `<option value="${s.id}">${meta.icon} ${s.name} (${s.level})</option>`;
+      }).join("");
     }
 
     if (modal) modal.classList.remove("hidden");
@@ -1237,6 +1660,7 @@ const MatesApp = (() => {
   }
 
   function openCreateMatchModal() {
+    if (!requireAuth("Connecte-toi pour organiser un match.")) return;
     showToast("Fonctionnalité : Création d'un match ouvert", "info");
     const sport = prompt("Quel sport souhaitez-vous organiser ? (ex: Padel, Football Five, Tennis)", "Padel");
     if (!sport) return;
@@ -1309,7 +1733,7 @@ const MatesApp = (() => {
     toggleAuthMode,
     handleGoogleAuth,
     handleAuthSubmit,
-    fillDemoAccount,
+    handleForgotPassword,
     locateGps,
     triggerAvatarChange,
     addSportToProfile,
