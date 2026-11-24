@@ -2209,9 +2209,11 @@ const MatesApp = (() => {
         showToast(`La connexion ${info.label} arrive bientôt. Utilise ton email en attendant !`, "info");
         return;
       }
-      const { error } = await SB.auth.signInWithOAuth({ provider, options: { redirectTo: siteUrl() } });
-      if (error) showToast(translateAuthError(error), "warning");
-      return; // le navigateur part vers Google puis revient sur le site
+      // Le bouton officiel Google remplace ce bouton dès qu'il est chargé.
+      // S'il n'a pas pu se charger (bloqueur de pubs, réseau), on propose l'email.
+      showToast("Le bouton Google n'a pas pu se charger (bloqueur de publicités ?). Recharge la page ou utilise ton email.", "warning");
+      renderGoogleButton();
+      return;
     }
     showToast(`Connexion ${info.label} simulée (mode démo)...`, "info");
     setTimeout(() => demoSocialLogin("demo@gmail.com"), 600);
