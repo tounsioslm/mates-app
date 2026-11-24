@@ -52,9 +52,7 @@ Pour une démo en classe, c'est plus simple de la couper :
 const MATES_SUPABASE_CONFIG = {
   url: "https://abcdefgh.supabase.co",
   anonKey: "eyJhbGciOi...",
-  googleEnabled: false,
-  appleEnabled: false,
-  phoneEnabled: false
+  googleEnabled: false
 };
 ```
 
@@ -69,7 +67,7 @@ const MATES_SUPABASE_CONFIG = {
 
 | Action | Résultat |
 |---|---|
-| **Créer mon profil** (en haut à droite) | Crée un vrai compte (email, Google, Apple ou numéro de téléphone) |
+| **Créer mon profil** (en haut à droite) | Crée un vrai compte (email ou Google) |
 | Après l'inscription | Assistant en 4 étapes : photo, prénom, âge, ville → sports et niveaux → dispos → bio |
 | Connexion | Vérifie vraiment l'email et le mot de passe |
 | **Mon profil → Enregistrer** | Sauvegarde le profil en ligne (visible depuis n'importe quel appareil) |
@@ -80,13 +78,13 @@ const MATES_SUPABASE_CONFIG = {
 Pour voir les comptes créés : Supabase → **Authentication** → **Users**.
 Pour voir les profils : **Table Editor** → `profiles`.
 
-## 6. Connexion Google, Apple et par SMS (optionnel)
+## 6. Connexion Google (optionnel)
 
-Tant qu'un moyen n'est pas activé, son bouton affiche simplement « bientôt disponible » :
+Tant que Google n'est pas activé, le bouton affiche simplement « bientôt disponible » :
 l'inscription par email fonctionne toujours. Après chaque activation, passe l'option
 correspondante à `true` dans [`js/supabase-config.js`](js/supabase-config.js), puis `git push`.
 
-Dans les trois cas, l'adresse de retour à donner au fournisseur est :
+L'adresse de retour à donner au fournisseur est :
 `https://<ton-projet>.supabase.co/auth/v1/callback`
 (Supabase → **Authentication** → **Sign In / Providers** → ouvre le fournisseur, l'adresse y est affichée).
 
@@ -95,21 +93,7 @@ Dans les trois cas, l'adresse de retour à donner au fournisseur est :
 2. **URI de redirection autorisés** : colle l'adresse de retour ci-dessus.
 3. Supabase → **Authentication** → **Sign In / Providers** → **Google** → active, colle le **Client ID** et le **Client Secret**.
 
-### Apple → `appleEnabled: true`
-⚠️ Nécessite un compte **Apple Developer** (99 $/an).
-1. [developer.apple.com](https://developer.apple.com/account/resources/identifiers/list/serviceId) → crée un **Services ID** (ex. `be.mates.web`) et coche **Sign in with Apple**.
-2. Domaine : `<ton-projet>.supabase.co` ; Return URL : l'adresse de retour ci-dessus.
-3. Crée une **clé** (Keys → Sign in with Apple) et télécharge le fichier `.p8`.
-4. Supabase → **Providers** → **Apple** → active, renseigne le Services ID, le Team ID, le Key ID et le contenu du `.p8`.
-
-### Numéro de téléphone (code par SMS) → `phoneEnabled: true`
-⚠️ Les SMS sont payants : il faut un fournisseur SMS (Twilio, MessageBird, Vonage...).
-1. Crée un compte chez le fournisseur (ex. [Twilio](https://www.twilio.com/), crédit d'essai offert).
-2. Supabase → **Providers** → **Phone** → active, choisis le fournisseur et colle ses identifiants.
-3. Le site envoie un code à 6 chiffres, valable quelques minutes.
-
-> En **mode démo** (sans Supabase), tout est simulé : Google et Apple créent un compte de démonstration,
-> et pour le téléphone le code est toujours **123456**.
+> En **mode démo** (sans Supabase), la connexion Google est simulée et crée un compte de démonstration.
 
 ## 7. Photos de profil
 

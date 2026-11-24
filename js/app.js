@@ -32,11 +32,8 @@ const MatesApp = (() => {
   })();
   // Moyens de connexion activés dans Supabase (voir js/supabase-config.js)
   const PROVIDERS = {
-    google: { label: "Google", enabled: !!(SB && MATES_SUPABASE_CONFIG.googleEnabled) },
-    apple: { label: "Apple", enabled: !!(SB && MATES_SUPABASE_CONFIG.appleEnabled) },
-    phone: { label: "SMS", enabled: !!(SB && MATES_SUPABASE_CONFIG.phoneEnabled) }
+    google: { label: "Google", enabled: !!(SB && MATES_SUPABASE_CONFIG.googleEnabled) }
   };
-  const DEMO_SMS_CODE = "123456";
 
   const LEVELS = ["Débutant", "Intermédiaire", "Confirmé", "Expert"];
   const FEATURED_CITIES = ["Liège", "Bruxelles", "Namur"];
@@ -76,7 +73,6 @@ const MatesApp = (() => {
     pendingProposeMateId: null,
     // Inscription : étape en cours de l'assistant de profil
     onboardingStep: 1,
-    phoneTarget: "",
     avatarTarget: "edit",
     // Chat de match
     chatMatchId: null,
@@ -630,7 +626,6 @@ const MatesApp = (() => {
 
     state.userProfile = profileFromRow(profileRow, true);
     state.userProfile.email = user.email || "";
-    state.userProfile.phone = user.phone || "";
     state.isAuthenticated = true;
     if (profileRow.live_until) {
       state.liveUntil = new Date(profileRow.live_until).getTime() || 0;
@@ -673,7 +668,6 @@ const MatesApp = (() => {
     if (m.includes("invalid login")) return "Email ou mot de passe incorrect.";
     if (m.includes("provider is not enabled") || m.includes("unsupported provider")) return "Ce moyen de connexion n'est pas encore activé. Utilise ton email.";
     if (m.includes("token") || m.includes("otp")) return "Code incorrect ou expiré. Redemande un code.";
-    if (m.includes("phone") || m.includes("sms")) return "Numéro de téléphone invalide ou SMS impossible à envoyer.";
     if (m.includes("already registered") || m.includes("already been registered")) return "Un compte existe déjà avec cet email. Connecte-toi !";
     if (m.includes("email not confirmed")) return "Confirme d'abord ton email (regarde ta boîte de réception).";
     if (m.includes("rate limit") || m.includes("security purposes")) return "Trop de tentatives, réessaie dans une minute.";
@@ -2033,10 +2027,9 @@ const MatesApp = (() => {
         showToast("Impossible d'enregistrer le profil, réessaie.", "warning");
         return false;
       }
-      const { email, phone } = state.userProfile;
+      const { email } = state.userProfile;
       state.userProfile = profileFromRow(row, true);
       state.userProfile.email = email;
-      state.userProfile.phone = phone;
     } else {
       state.userProfile = JSON.parse(JSON.stringify(p));
       localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(state.userProfile));
@@ -2088,8 +2081,6 @@ const MatesApp = (() => {
     const pwdHint = document.getElementById("auth-password-hint");
     const forgotBtn = document.getElementById("auth-forgot-btn");
     const isRegister = state.authMode === "register";
-    const phoneBtnLabel = document.querySelector('#auth-providers [onclick*="phone"] span');
-    if (phoneBtnLabel) phoneBtnLabel.textContent = isRegister ? "S'inscrire avec mon numéro" : "Continuer avec mon numéro";
     if (pwdInput) pwdInput.setAttribute("autocomplete", isRegister ? "new-password" : "current-password");
     if (pwdHint) pwdHint.classList.toggle("hidden", !isRegister);
     if (forgotBtn) forgotBtn.classList.toggle("hidden", isRegister);
@@ -2110,22 +2101,11 @@ const MatesApp = (() => {
     lucide.createIcons();
   }
 
-  function showAuthPanel(panel) {
-    const isPhone = panel === "phone";
-    const toggle = (id, show) => {
+  function showAuthPanel() {
+    ["auth-providers", "auth-email-block"].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.classList.toggle("hidden", !show);
-    };
-    toggle("auth-providers", !isPhone);
-    toggle("auth-email-block", !isPhone);
-    toggle("auth-phone-panel", isPhone);
-    toggle("auth-phone-form", true);
-    toggle("auth-otp-form", false);
-    if (isPhone) {
-      const input = document.getElementById("auth-phone");
-      if (input) setTimeout(() => input.focus(), 50);
-    }
-    lucide.createIcons();
+      if (el) el.classList.remove("hidden");
+    });
   }
 
   async function handleOAuth(provider) {
@@ -2133,23 +2113,15 @@ const MatesApp = (() => {
     if (!info) return;
     if (SB) {
       if (!info.enabled) {
-        showToast(`La connexion ${info.label} arrive bientôt. Utilise ton email ou ton numéro en attendant !`, "info");
+        showToast(`La connexion ${info.label} arrive bientôt. Utilise ton email en attendant !`, "info");
         return;
       }
       const { error } = await SB.auth.signInWithOAuth({ provider, options: { redirectTo: siteUrl() } });
       if (error) showToast(translateAuthError(error), "warning");
-      return; // le navigateur part vers Google / Apple puis revient sur le site
+      return; // le navigateur part vers Google puis revient sur le site
     }
     showToast(`Connexion ${info.label} simulée (mode démo)...`, "info");
-    setTimeout(() => demoSocialLogin(provider === "google" ? "demo@gmail.com" : "demo@privaterelay.appleid.com", ""), 600);
-  }
-
-  // Numéro saisi -> format international (+32470123456)
-  function normalizePhone(country, raw) {
-    let digits = String(raw || "").replace(/[^\d+]/g, "");
-    if (digits.startsWith("00")) digits = "+" + digits.slice(2);
-    if (!digits.startsWith("+")) digits = country + digits.replace(/^0+/, "");
-    return /^\+\d{8,15}$/.test(digits) ? digits : null;
+    setTimeout(() => demoSocialLogin("demo@gmail.com"), 600);
   }
 
   function setButtonLoading(id, isLoading) {
@@ -2158,79 +2130,6 @@ const MatesApp = (() => {
     btn.disabled = isLoading;
     btn.classList.toggle("opacity-60", isLoading);
     btn.classList.toggle("pointer-events-none", isLoading);
-  }
-
-  async function sendPhoneCode(event) {
-    if (event) event.preventDefault();
-    const country = document.getElementById("auth-phone-country").value;
-    const phone = normalizePhone(country, document.getElementById("auth-phone").value);
-    if (!phone) {
-      showToast("Numéro invalide. Exemple : 470 12 34 56", "warning");
-      return;
-    }
-
-    if (SB) {
-      if (!PROVIDERS.phone.enabled) {
-        showToast("La connexion par SMS arrive bientôt. Utilise ton email en attendant !", "info");
-        return;
-      }
-      setButtonLoading("auth-phone-send-btn", true);
-      try {
-        const { error } = await SB.auth.signInWithOtp({ phone });
-        if (error) throw error;
-      } catch (err) {
-        showToast(translateAuthError(err), "warning");
-        return;
-      } finally {
-        setButtonLoading("auth-phone-send-btn", false);
-      }
-      showToast("Code envoyé par SMS !", "success");
-    } else {
-      showToast(`Mode démo : aucun SMS n'est envoyé, tape le code ${DEMO_SMS_CODE}.`, "info");
-    }
-
-    state.phoneTarget = phone;
-    document.getElementById("auth-phone-form").classList.add("hidden");
-    document.getElementById("auth-otp-form").classList.remove("hidden");
-    const hint = document.getElementById("auth-otp-hint");
-    if (hint) hint.textContent = `Code à 6 chiffres envoyé au ${phone}.`;
-    const otp = document.getElementById("auth-otp");
-    if (otp) { otp.value = ""; setTimeout(() => otp.focus(), 50); }
-  }
-
-  async function verifyPhoneCode(event) {
-    if (event) event.preventDefault();
-    const otpInput = document.getElementById("auth-otp");
-    const token = otpInput.value.replace(/\D/g, "");
-    if (token.length !== 6) {
-      showToast("Le code contient 6 chiffres.", "warning");
-      return;
-    }
-
-    if (!SB) {
-      if (token !== DEMO_SMS_CODE) {
-        showToast(`Code incorrect. En mode démo, le code est ${DEMO_SMS_CODE}.`, "warning");
-        return;
-      }
-      demoSocialLogin("", state.phoneTarget);
-      return;
-    }
-
-    setButtonLoading("auth-otp-btn", true);
-    try {
-      const { data, error } = await SB.auth.verifyOtp({ phone: state.phoneTarget, token, type: "sms" });
-      if (error) throw error;
-      otpInput.value = "";
-      await applySession(data.session);
-      await loadRemoteMates();
-      const complete = isProfileComplete(state.userProfile);
-      showToast(complete ? `Content de te revoir, ${state.userProfile.firstName} !` : "Numéro vérifié ! Personnalise ton profil.", "success");
-      goAfterLogin();
-    } catch (err) {
-      showToast(translateAuthError(err), "warning");
-    } finally {
-      setButtonLoading("auth-otp-btn", false);
-    }
   }
 
   function setAuthLoading(isLoading) {
@@ -2336,7 +2235,7 @@ const MatesApp = (() => {
   function newBlankProfile(extra) {
     const p = JSON.parse(JSON.stringify(DEFAULT_MY_PROFILE));
     return Object.assign(p, {
-      firstName: "", lastName: "", email: "", phone: "", age: null, city: "", bio: "",
+      firstName: "", lastName: "", email: "", age: null, city: "", bio: "",
       avatar: DEFAULT_AVATAR, sports: [], availability: {}, onboarded: false
     }, extra || {});
   }
@@ -2350,14 +2249,14 @@ const MatesApp = (() => {
     renderHeaderUserSection();
   }
 
-  // Mode démo : Google / Apple / SMS -> on retrouve le compte déjà personnalisé, sinon nouveau compte
-  function demoSocialLogin(email, phone) {
+  // Mode démo : Google -> on retrouve le compte déjà personnalisé, sinon nouveau compte
+  function demoSocialLogin(email) {
     const p = state.userProfile;
     if (p && p.onboarded && isProfileComplete(p)) {
       loginSuccess(p.email || email);
       return;
     }
-    startDemoAccount({ email, phone });
+    startDemoAccount({ email });
     showToast("Compte créé ! Personnalise ton profil.", "success");
     goAfterLogin();
   }
@@ -3552,8 +3451,6 @@ const MatesApp = (() => {
     handleOAuth,
     handleGoogleAuth: () => handleOAuth("google"),
     showAuthPanel,
-    sendPhoneCode,
-    verifyPhoneCode,
     pickAvatar,
     onAvatarFile,
     onboardingNext,
