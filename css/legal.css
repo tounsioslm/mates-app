@@ -1,0 +1,27 @@
+/* Pages légales (confidentialité, conditions) */
+body {
+  margin: 0;
+  background: #232323;
+  color: #e2e8f0;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  line-height: 1.65;
+}
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 4rem;
+}
+h1, h2 {
+  font-family: 'Barlow Condensed', 'Plus Jakarta Sans', sans-serif;
+  font-style: italic;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1.05;
+}
+h1 { font-size: 2.75rem; margin: 1.5rem 0 0.25rem; }
+h2 { font-size: 1.6rem; margin: 2.25rem 0 0.5rem; color: #A6E20E; }
+a { color: #A6E20E; }
+.back { font-weight: 600; text-decoration: none; font-size: 0.9rem; }
+.muted { color: #94a3b8; font-size: 0.85rem; }
+li { margin: 0.35rem 0; }
+strong { color: #fff; }
