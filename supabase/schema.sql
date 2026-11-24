@@ -101,3 +101,39 @@ drop policy if exists "Chacun supprime sa photo" on storage.objects;
 create policy "Chacun supprime sa photo"
   on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- 5. Chat des matchs (messages en temps réel)
+create table if not exists public.match_messages (
+  id          bigint generated always as identity primary key,
+  match_id    text not null check (char_length(match_id) between 1 and 80),
+  user_id     uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  author      text not null check (char_length(author) between 1 and 60),
+  avatar      text check (avatar is null or avatar like 'https://%'),
+  body        text not null check (char_length(body) between 1 and 280),
+  created_at  timestamptz not null default now()
+);
+create index if not exists match_messages_match_idx on public.match_messages (match_id, created_at);
+
+alter table public.match_messages enable row level security;
+
+drop policy if exists "Messages lisibles par les membres" on public.match_messages;
+create policy "Messages lisibles par les membres"
+  on public.match_messages for select to authenticated
+  using (true);
+
+drop policy if exists "Chacun écrit en son nom" on public.match_messages;
+create policy "Chacun écrit en son nom"
+  on public.match_messages for insert to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Chacun supprime ses messages" on public.match_messages;
+create policy "Chacun supprime ses messages"
+  on public.match_messages for delete to authenticated
+  using (auth.uid() = user_id);
+
+-- Diffusion en temps réel des nouveaux messages
+do $$
+begin
+  alter publication supabase_realtime add table public.match_messages;
+exception when duplicate_object then null;
+end $$;

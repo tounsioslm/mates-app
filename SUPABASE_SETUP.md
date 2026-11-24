@@ -116,3 +116,13 @@ Dans les trois cas, l'adresse de retour à donner au fournisseur est :
 Le fichier `schema.sql` crée aussi le dossier de stockage **avatars** (public, 2 Mo max par photo).
 Si tu as exécuté une ancienne version du fichier, relance-le en entier dans **SQL Editor** : il ne casse rien.
 Les photos sont recadrées en carré et réduites dans le navigateur avant l'envoi.
+
+## 8. Chat des matchs
+
+Le fichier `schema.sql` crée aussi la table **match_messages** et l'active en **temps réel** :
+les messages apparaissent instantanément chez tous les joueurs inscrits au match.
+Relance le fichier en entier dans **SQL Editor** si tu l'avais exécuté avant cette mise à jour.
+
+En **mode démo**, les messages restent dans le navigateur et un autre joueur « répond »
+automatiquement quelques secondes plus tard, pour montrer le fonctionnement.
+

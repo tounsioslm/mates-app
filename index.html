@@ -56,7 +56,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Styles personnalisés -->
-  <link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body class="bg-mates-dark text-slate-100 min-h-screen flex flex-col font-sans selection:bg-mates-green selection:text-black">
 
@@ -1264,6 +1264,48 @@
     </section>
 
     <!-- ------------------------------------------------------------------
+         CHAT DU MATCH (plein écran, réservé aux joueurs inscrits)
+         ------------------------------------------------------------------ -->
+    <section id="view-match-chat" class="page-view hidden fade-in py-4 sm:py-8">
+      <div class="max-w-3xl mx-auto px-3 sm:px-6">
+        <div class="bg-mates-card border border-mates-border rounded-3xl shadow-2xl flex flex-col overflow-hidden h-[calc(100dvh-10.5rem)] sm:h-[calc(100dvh-9rem)] min-h-[30rem]">
+
+          <!-- En-tête : retour, match, joueurs -->
+          <div class="flex items-center gap-3 px-3 sm:px-5 py-3 border-b border-mates-border bg-mates-off">
+            <a href="#dashboard" onclick="if (history.length > 1) { history.back(); return false; }" class="w-9 h-9 rounded-full hover:bg-mates-cardElevated flex items-center justify-center text-slate-300 flex-shrink-0" aria-label="Retour">
+              <i data-lucide="arrow-left" class="w-5 h-5"></i>
+            </a>
+            <div id="chat-header" class="flex-1 min-w-0"></div>
+            <button type="button" id="chat-info-btn" class="btn-outline-neon text-xs py-2 px-3 flex-shrink-0">
+              <i data-lucide="info" class="w-4 h-4"></i><span class="hidden sm:inline">Infos</span>
+            </button>
+          </div>
+
+          <!-- Carte épinglée : rendez-vous + places -->
+          <div id="chat-pinned" class="px-3 sm:px-5 py-2.5 border-b border-mates-border bg-mates-green/5"></div>
+
+          <!-- Messages -->
+          <div id="chat-messages" class="flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-1" aria-live="polite"></div>
+
+          <!-- « X écrit… » -->
+          <div id="chat-typing" class="hidden px-5 pb-1 text-[11px] text-slate-400 italic"></div>
+
+          <!-- Réponses rapides -->
+          <div id="chat-quick" class="flex gap-2 overflow-x-auto px-3 sm:px-5 pt-2 pb-1 border-t border-mates-border"></div>
+
+          <!-- Saisie -->
+          <form id="chat-form" class="flex gap-2 p-3 bg-mates-off">
+            <label for="chat-input" class="sr-only">Message</label>
+            <input id="chat-input" maxlength="280" autocomplete="off" placeholder="Écris aux autres joueurs…" class="flex-1 min-w-0 bg-mates-card border border-mates-border rounded-full px-4 py-3 text-sm text-white focus:outline-none focus:border-mates-green">
+            <button type="submit" class="w-12 h-12 rounded-full bg-mates-green text-mates-dark flex items-center justify-center hover:brightness-110 flex-shrink-0" aria-label="Envoyer">
+              <i data-lucide="send" class="w-5 h-5"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------------
          MON ESPACE (tableau de bord du joueur connecté)
          ------------------------------------------------------------------ -->
     <section id="view-dashboard" class="page-view hidden fade-in py-10">
@@ -1303,6 +1345,12 @@
             <a href="#matches" class="text-xs font-semibold text-mates-green hover:underline">Trouver un match</a>
           </div>
           <div id="dash-upcoming" class="space-y-3"></div>
+        </div>
+
+        <!-- Mes discussions de match -->
+        <div class="bg-mates-card border border-mates-border rounded-3xl p-6 space-y-4">
+          <h2 class="text-2xl text-white flex items-center gap-2"><i data-lucide="messages-square" class="w-5 h-5 text-mates-green"></i>Mes discussions</h2>
+          <div id="dash-chats" class="space-y-2"></div>
         </div>
 
         <!-- Progression & badges -->
@@ -1544,8 +1592,8 @@
 
   <!-- Scripts Application -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="js/supabase-config.js?v=5"></script>
-  <script src="js/data.js?v=5"></script>
-  <script src="js/app.js?v=5"></script>
+  <script src="js/supabase-config.js?v=6"></script>
+  <script src="js/data.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>

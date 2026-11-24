@@ -77,7 +77,10 @@ const MatesApp = (() => {
     // Inscription : étape en cours de l'assistant de profil
     onboardingStep: 1,
     phoneTarget: "",
-    avatarTarget: "edit"
+    avatarTarget: "edit",
+    // Chat de match
+    chatMatchId: null,
+    remoteChat: {}
   };
 
   /**
@@ -388,7 +391,8 @@ const MatesApp = (() => {
     state.matchState = {
       joined: (saved && saved.joined) || {},
       created: (saved && Array.isArray(saved.created)) ? saved.created : [],
-      chat: (saved && saved.chat) || {}
+      chat: (saved && saved.chat) || {},
+      read: (saved && saved.read) || {}   // dernier passage dans chaque chat (messages non lus)
     };
     // Nettoyage de l'ancien format
     try { localStorage.removeItem(STORAGE_KEY_MATCHES); } catch (e) { /* ignore */ }
@@ -561,7 +565,7 @@ const MatesApp = (() => {
   }
 
   function updateTabbar(route) {
-    const map = { welcome: "home", home: "home", sports: "sports", sport: "sports", mate: "sports", matches: "matches", match: "matches", dashboard: "dashboard", "edit-profile": "dashboard", onboarding: "dashboard", auth: "dashboard" };
+    const map = { welcome: "home", home: "home", sports: "sports", sport: "sports", mate: "sports", matches: "matches", match: "matches", chat: "matches", dashboard: "dashboard", "edit-profile": "dashboard", onboarding: "dashboard", auth: "dashboard" };
     const active = map[route] || "";
     document.querySelectorAll(".bottom-tabbar a").forEach(a => {
       a.classList.toggle("active", a.dataset.tab === active);
@@ -750,6 +754,7 @@ const MatesApp = (() => {
 
     state.currentRoute = mainView;
     if (mainView !== "match") closeModals(true);
+    if (mainView !== "chat") closeChat();
     if (mainView !== "dashboard" && state.countdownTimer) {
       clearInterval(state.countdownTimer);
       state.countdownTimer = null;
@@ -867,6 +872,26 @@ const MatesApp = (() => {
         break;
       }
 
+      case "chat": {
+        if (!state.sessionReady) return;
+        const match = getMatch(param);
+        if (!match) {
+          showToast("Ce match n'existe plus ou est déjà terminé.", "info");
+          window.location.replace("#matches");
+          return;
+        }
+        if (!requireAuth("Connecte-toi pour accéder à la discussion du match.")) return;
+        if (!isJoined(match)) {
+          showToast("Rejoins le match pour accéder à sa discussion.", "info");
+          window.location.replace(`#match/${match.id}`);
+          return;
+        }
+        setTitle(`Chat · ${match.title}`);
+        showView("view-match-chat");
+        openChat(match);
+        break;
+      }
+
       case "dashboard":
         if (!state.sessionReady) return;
         if (!state.isAuthenticated) {
@@ -877,6 +902,7 @@ const MatesApp = (() => {
         setTitle("Mon espace");
         showView("view-dashboard");
         renderDashboard();
+        renderDashChats();
         break;
 
       default:
@@ -2717,8 +2743,6 @@ const MatesApp = (() => {
     const links = mapsLinks(match);
     const weather = weatherFor(match);
     const players = matchPlayers(match);
-    const chat = matchChat(match);
-
     body.innerHTML = `
       <div class="flex items-start gap-4 pr-10">
         <span class="text-5xl">${sport.icon}</span>
@@ -2781,27 +2805,7 @@ const MatesApp = (() => {
         </div>
       </div>
 
-      <div class="rounded-2xl border border-mates-border overflow-hidden">
-        <div class="px-4 py-3 bg-mates-off border-b border-mates-border flex items-center justify-between">
-          <div class="text-sm font-bold text-white flex items-center gap-2"><i data-lucide="messages-square" class="w-4 h-4 text-mates-green"></i>Discussion du match</div>
-          <span class="text-[11px] text-slate-500">${chat.length} message${chat.length > 1 ? "s" : ""}</span>
-        </div>
-        <div id="match-chat-list" class="p-4 space-y-3 max-h-56 overflow-y-auto">
-          ${chat.length ? chat.map(c => `
-            <div class="flex items-end gap-2 ${c.mine ? "flex-row-reverse" : ""}">
-              ${c.avatar ? `<img src="${c.avatar}" alt="" class="w-7 h-7 rounded-full object-cover flex-shrink-0">` : ""}
-              <div class="chat-bubble ${c.mine ? "mine" : ""}">
-                <div class="text-[11px] font-bold ${c.mine ? "text-mates-green" : "text-slate-300"}">${escapeHtml(c.mine ? "Toi" : c.author)} <span class="font-normal text-slate-500">· ${formatAgo(c.at)}</span></div>
-                <div class="text-slate-100">${escapeHtml(c.text)}</div>
-              </div>
-            </div>`).join("") : `<p class="text-xs text-slate-500 text-center py-3">Aucun message. Lance la discussion : qui ramène les balles ?</p>`}
-        </div>
-        <form onsubmit="MatesApp.sendChatMessage(event, '${match.id}')" class="flex gap-2 p-3 border-t border-mates-border bg-mates-off">
-          <label for="match-chat-input" class="sr-only">Message</label>
-          <input id="match-chat-input" maxlength="280" autocomplete="off" placeholder="${joined ? "Écris aux autres joueurs…" : "Rejoins le match pour discuter"}" class="flex-1 min-w-0 bg-mates-card border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green">
-          <button type="submit" class="btn-neon px-4 py-2.5" aria-label="Envoyer"><i data-lucide="send" class="w-4 h-4"></i></button>
-        </form>
-      </div>
+      ${chatPreviewHtml(match)}
 
       <div class="flex flex-col sm:flex-row gap-2">
         <button onclick="MatesApp.shareMatch('${match.id}', 'copy')" class="flex-1 btn-outline-neon py-2.5 text-sm"><i data-lucide="link" class="w-4 h-4"></i><span>Copier le lien du match</span></button>
@@ -2817,8 +2821,6 @@ const MatesApp = (() => {
       </div>
     `;
     lucide.createIcons();
-    const chatList = document.getElementById("match-chat-list");
-    if (chatList) chatList.scrollTop = chatList.scrollHeight;
   }
 
   // Compatibilité : anciens boutons « Rejoindre » (carte de l'accueil)
@@ -2839,6 +2841,7 @@ const MatesApp = (() => {
       return;
     }
     state.matchState.joined[match.id] = new Date().toISOString();
+    addLocalChatMessage(match.id, { system: true, text: `${myPlayerEntry().name} a rejoint le match 👋` });
     saveMatchState();
     renderOpenMatches();
     if (state.openMatchId === match.id) renderMatchDetail(match.id);
@@ -2857,12 +2860,182 @@ const MatesApp = (() => {
     showToast("Tu t'es désinscrit. Ta place est de nouveau libre pour un autre mate.", "info");
   }
 
-  function sendChatMessage(event, matchId) {
+  /* ==========================================================================
+     CHAT DU MATCH
+     - Mode démo : messages enregistrés dans le navigateur + réponses simulées des joueurs
+     - Comptes réels : table Supabase « match_messages » en temps réel
+     ========================================================================== */
+  const QUICK_REPLIES = ["J'arrive 🏃", "5 min de retard ⏱️", "Je suis au terrain 📍", "Qui ramène les balles ?", "Je peux prêter une raquette 🎾", "Bien joué tout le monde 👏"];
+  let chatChannel = null;
+  let botTimers = [];
+
+  function addLocalChatMessage(matchId, msg) {
+    if (!state.matchState.chat[matchId]) state.matchState.chat[matchId] = [];
+    state.matchState.chat[matchId].push(Object.assign({ at: new Date().toISOString() }, msg));
+    state.matchState.chat[matchId] = state.matchState.chat[matchId].slice(-80);
+  }
+
+  function chatMessages(match) {
+    return matchChat(match)
+      .concat(state.remoteChat[match.id] || [])
+      .sort((a, b) => new Date(a.at) - new Date(b.at));
+  }
+
+  function unreadCount(match) {
+    if (!isJoined(match)) return 0;
+    const since = new Date(state.matchState.read[match.id] || 0).getTime();
+    return chatMessages(match).filter(m => !m.mine && !m.system && new Date(m.at).getTime() > since).length;
+  }
+
+  function markChatRead(matchId) {
+    state.matchState.read[matchId] = new Date().toISOString();
+    saveMatchState();
+  }
+
+  function chatPreviewHtml(match) {
+    const msgs = chatMessages(match).filter(m => !m.system);
+    const last = msgs.slice(-2);
+    const joined = isJoined(match);
+    const unread = unreadCount(match);
+    return `
+      <div class="rounded-2xl border border-mates-border overflow-hidden">
+        <div class="px-4 py-3 bg-mates-off border-b border-mates-border flex items-center justify-between">
+          <div class="text-sm font-bold text-white flex items-center gap-2"><i data-lucide="messages-square" class="w-4 h-4 text-mates-green"></i>Discussion du match</div>
+          <span class="text-[11px] text-slate-500">${msgs.length} message${msgs.length > 1 ? "s" : ""}</span>
+        </div>
+        <div class="p-4 space-y-2 ${joined ? "" : "blur-[3px] select-none pointer-events-none"}" aria-hidden="${joined ? "false" : "true"}">
+          ${last.length ? last.map(c => `
+            <div class="flex items-start gap-2 text-xs">
+              <img src="${escapeHtml(c.avatar || DEFAULT_AVATAR)}" alt="" class="w-6 h-6 rounded-full object-cover flex-shrink-0">
+              <div class="min-w-0"><span class="font-bold ${c.mine ? "text-mates-green" : "text-slate-200"}">${escapeHtml(c.mine ? "Toi" : c.author)}</span> <span class="text-slate-300">${escapeHtml(c.text)}</span></div>
+            </div>`).join("") : `<p class="text-xs text-slate-500">Aucun message pour l'instant.</p>`}
+        </div>
+        <div class="p-3 border-t border-mates-border bg-mates-off">
+          ${joined
+            ? `<a href="#chat/${match.id}" class="w-full btn-neon py-2.5 text-sm"><i data-lucide="message-circle" class="w-4 h-4"></i><span>Ouvrir la discussion</span>${unread ? `<span class="ml-1 px-2 py-0.5 rounded-full bg-mates-dark text-mates-green text-[11px] font-extrabold">${unread}</span>` : ""}</a>`
+            : `<div class="text-center text-xs text-slate-400 flex items-center justify-center gap-1.5"><i data-lucide="lock" class="w-3.5 h-3.5"></i>Rejoins le match pour discuter avec les joueurs.</div>`}
+        </div>
+      </div>`;
+  }
+
+  function openChat(match) {
+    closeChat();
+    state.chatMatchId = match.id;
+    const sport = sportMeta(match.sportId);
+    const start = new Date(match.startsAt);
+    const players = matchPlayers(match);
+    const remaining = remainingSlots(match);
+    const links = mapsLinks(match);
+
+    const header = document.getElementById("chat-header");
+    if (header) header.innerHTML = `
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="text-3xl flex-shrink-0">${sport.icon}</span>
+        <div class="min-w-0">
+          <div class="font-bold text-white truncate">${escapeHtml(match.title)}</div>
+          <div class="text-[11px] text-slate-400 truncate">${players.length}/${match.totalSlots} joueurs · ${escapeHtml(players.map(p => p.me ? "toi" : p.name.split(" ")[0]).join(", "))}</div>
+        </div>
+      </div>`;
+
+    const pinned = document.getElementById("chat-pinned");
+    if (pinned) pinned.innerHTML = `
+      <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-xs">
+        <span class="flex items-center gap-1.5 text-slate-200"><i data-lucide="pin" class="w-3.5 h-3.5 text-mates-green"></i><strong>${formatMatchDay(start)} · ${formatHour(start)}</strong> · ${escapeHtml(match.clubName)}</span>
+        <span class="flex items-center gap-3 font-semibold">
+          <a href="${links.google}" target="_blank" rel="noopener" class="text-mates-green hover:underline">Itinéraire</a>
+          ${remaining > 0
+            ? `<button type="button" onclick="MatesApp.shareMatch('${match.id}', 'whatsapp')" class="text-amber-300 hover:underline">Il manque ${remaining} joueur${remaining > 1 ? "s" : ""} · Inviter</button>`
+            : `<span class="text-mates-green">Équipe complète ✅</span>`}
+        </span>
+      </div>`;
+
+    const info = document.getElementById("chat-info-btn");
+    if (info) info.onclick = () => { window.location.hash = `#match/${match.id}`; };
+
+    const quick = document.getElementById("chat-quick");
+    if (quick) quick.innerHTML = QUICK_REPLIES.map((q, i) =>
+      `<button type="button" class="pill whitespace-nowrap flex-shrink-0" onclick="MatesApp.sendQuickReply(${i})">${escapeHtml(q)}</button>`).join("");
+
+    const form = document.getElementById("chat-form");
+    if (form) form.onsubmit = (e) => sendChatMessage(e, match.id);
+
+    renderChatMessages(true);
+    markChatRead(match.id);
+    if (SB) subscribeRemoteChat(match.id);
+    const input = document.getElementById("chat-input");
+    if (input && window.matchMedia("(min-width: 768px)").matches) setTimeout(() => input.focus(), 100);
+  }
+
+  function closeChat() {
+    botTimers.forEach(clearTimeout);
+    botTimers = [];
+    const typing = document.getElementById("chat-typing");
+    if (typing) typing.classList.add("hidden");
+    if (chatChannel && SB) SB.removeChannel(chatChannel);
+    chatChannel = null;
+    state.chatMatchId = null;
+  }
+
+  function dayLabel(date) {
+    const d = startOfDay(date).getTime();
+    const today = startOfDay(new Date()).getTime();
+    if (d === today) return "Aujourd'hui";
+    if (d === today - 86400000) return "Hier";
+    return date.toLocaleDateString("fr-BE", { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  function renderChatMessages(forceScroll) {
+    const box = document.getElementById("chat-messages");
+    const match = state.chatMatchId && getMatch(state.chatMatchId);
+    if (!box || !match) return;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+    const msgs = chatMessages(match);
+
+    let html = "";
+    let lastDay = null;
+    let prev = null;
+    msgs.forEach(m => {
+      const at = new Date(m.at);
+      const day = startOfDay(at).getTime();
+      if (day !== lastDay) {
+        html += `<div class="flex justify-center py-2"><span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-mates-off border border-mates-border rounded-full px-3 py-1">${dayLabel(at)}</span></div>`;
+        lastDay = day;
+        prev = null;
+      }
+      if (m.system) {
+        html += `<div class="flex justify-center py-1"><span class="text-[11px] text-slate-400 bg-mates-cardElevated rounded-full px-3 py-1">${escapeHtml(m.text)}</span></div>`;
+        prev = null;
+        return;
+      }
+      const grouped = prev && prev.author === m.author && prev.mine === m.mine && at - new Date(prev.at) < 5 * 60000;
+      html += `
+        <div class="flex items-end gap-2 ${m.mine ? "flex-row-reverse" : ""} ${grouped ? "" : "pt-2"}">
+          ${m.mine ? "" : grouped
+            ? `<span class="w-7 flex-shrink-0"></span>`
+            : `<${m.mateId ? `a href="#mate/${m.mateId}"` : "span"} class="flex-shrink-0"><img src="${escapeHtml(m.avatar || DEFAULT_AVATAR)}" alt="" class="w-7 h-7 rounded-full object-cover"></${m.mateId ? "a" : "span"}>`}
+          <div class="chat-bubble ${m.mine ? "mine" : ""} text-sm">
+            ${!m.mine && !grouped ? `<div class="text-[11px] font-bold text-mates-green mb-0.5">${escapeHtml(m.author)}</div>` : ""}
+            <span class="text-slate-100 whitespace-pre-wrap">${escapeHtml(m.text)}</span>
+            <span class="text-[10px] text-slate-500 ml-2 float-right mt-1.5">${formatHour(at)}</span>
+          </div>
+        </div>`;
+      prev = m;
+    });
+    if (!msgs.length) {
+      html = `<div class="h-full flex flex-col items-center justify-center text-center gap-2 text-slate-400">
+        <div class="text-4xl">💬</div>
+        <p class="text-sm">Lance la discussion : qui ramène les balles ?</p></div>`;
+    }
+    box.innerHTML = html;
+    if (forceScroll || nearBottom) box.scrollTop = box.scrollHeight;
+  }
+
+  async function sendChatMessage(event, matchId, presetText) {
     if (event) event.preventDefault();
-    const match = getMatch(matchId);
-    const input = document.getElementById("match-chat-input");
-    if (!match || !input) return;
-    const text = input.value.trim().slice(0, 280);
+    const match = getMatch(matchId || state.chatMatchId);
+    const input = document.getElementById("chat-input");
+    if (!match) return;
+    const text = String(presetText != null ? presetText : (input ? input.value : "")).trim().slice(0, 280);
     if (!text) return;
     if (!requireAuth("Connecte-toi pour écrire aux joueurs.")) return;
     if (!isJoined(match)) {
@@ -2870,13 +3043,148 @@ const MatesApp = (() => {
       return;
     }
     const me = myPlayerEntry();
-    if (!state.matchState.chat[match.id]) state.matchState.chat[match.id] = [];
-    state.matchState.chat[match.id].push({ author: me.name, avatar: me.avatar, text, at: new Date().toISOString(), mine: true });
-    state.matchState.chat[match.id] = state.matchState.chat[match.id].slice(-50);
-    saveMatchState();
-    renderMatchDetail(match.id);
-    const again = document.getElementById("match-chat-input");
-    if (again) again.focus();
+
+    if (SB && state.userProfile && state.userProfile.userId) {
+      const row = {
+        match_id: match.id,
+        user_id: state.userProfile.userId,
+        author: cleanText(me.name, 60),
+        avatar: cleanAvatar(me.avatar) === DEFAULT_AVATAR ? null : me.avatar,
+        body: text
+      };
+      const { data, error } = await SB.from("match_messages").insert(row).select().single();
+      if (error) {
+        console.warn("Message non envoyé :", error.message);
+        showToast("Message non envoyé, réessaie.", "warning");
+        return;
+      }
+      addRemoteMessage(match.id, data);
+    } else {
+      addLocalChatMessage(match.id, { author: me.name, avatar: me.avatar, text, mine: true });
+      saveMatchState();
+      scheduleBotReply(match, text);
+    }
+
+    if (input && presetText == null) input.value = "";
+    markChatRead(match.id);
+    renderChatMessages(true);
+    if (input && presetText == null) input.focus();
+  }
+
+  function sendQuickReply(index) {
+    if (QUICK_REPLIES[index]) sendChatMessage(null, state.chatMatchId, QUICK_REPLIES[index]);
+  }
+
+  // ---- Comptes réels : messages Supabase + temps réel
+  function rowToMessage(row) {
+    const myId = state.userProfile && state.userProfile.userId;
+    return {
+      id: "r" + row.id,
+      author: cleanText(row.author, 60) || "Joueur",
+      avatar: cleanAvatar(row.avatar),
+      text: String(row.body || "").slice(0, 280),
+      at: row.created_at,
+      mine: row.user_id === myId,
+      mateId: row.user_id === myId ? "my-profile" : "user-" + row.user_id
+    };
+  }
+
+  function addRemoteMessage(matchId, row) {
+    if (!row) return;
+    const list = state.remoteChat[matchId] || (state.remoteChat[matchId] = []);
+    const msg = rowToMessage(row);
+    if (list.some(m => m.id === msg.id)) return;
+    list.push(msg);
+    if (state.chatMatchId === matchId) {
+      renderChatMessages(msg.mine);
+      markChatRead(matchId);
+    }
+  }
+
+  async function subscribeRemoteChat(matchId) {
+    const { data, error } = await SB.from("match_messages")
+      .select("*").eq("match_id", matchId)
+      .order("created_at", { ascending: true }).limit(200);
+    if (error) {
+      console.warn("Chat indisponible :", error.message);
+      return;
+    }
+    state.remoteChat[matchId] = (data || []).map(rowToMessage);
+    if (state.chatMatchId !== matchId) return;
+    renderChatMessages(true);
+    chatChannel = SB.channel("match-chat-" + matchId)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "match_messages", filter: `match_id=eq.${matchId}` },
+        payload => addRemoteMessage(matchId, payload.new))
+      .subscribe();
+  }
+
+  // ---- Mode démo : un autre joueur répond (pour voir le chat vivre)
+  function botAnswer(text) {
+    const t = text.toLowerCase();
+    if (/retard|⏱/.test(t)) return "Pas de souci, on t'attend 👍";
+    if (/balle/.test(t)) return "J'ai un tube neuf dans mon sac, je les prends !";
+    if (/arrive|🏃/.test(t)) return "Top, à tout de suite !";
+    if (/terrain|📍|suis là/.test(t)) return "J'arrive dans 2 min, je me gare 🚗";
+    if (/raquette|prêter/.test(t)) return "Merci, je t'en emprunte peut-être une 🙏";
+    if (/bien joué|👏|gg|merci/.test(t)) return "Merci à toi ! On remet ça la semaine prochaine ? 🔥";
+    if (/\?\s*$/.test(t)) return "Bonne question, je regarde et je te redis !";
+    const generic = ["Ça marche 👌", "Carrément !", "Hâte d'y être 💪", "Noté !", "Parfait, à tout à l'heure"];
+    return generic[Math.floor(Math.random() * generic.length)];
+  }
+
+  function scheduleBotReply(match, text) {
+    const others = match.players.filter(p => p.avatar && !p.me);
+    if (!others.length) return;
+    botTimers.forEach(clearTimeout);
+    const who = others[Math.floor(Math.random() * others.length)];
+    const typing = document.getElementById("chat-typing");
+    botTimers = [
+      setTimeout(() => {
+        if (state.chatMatchId !== match.id || !typing) return;
+        typing.textContent = `${who.name} est en train d'écrire…`;
+        typing.classList.remove("hidden");
+      }, 900),
+      setTimeout(() => {
+        if (typing) typing.classList.add("hidden");
+        addLocalChatMessage(match.id, { author: who.name, avatar: who.avatar, mateId: who.mateId, text: botAnswer(text) });
+        saveMatchState();
+        if (state.chatMatchId === match.id) {
+          markChatRead(match.id);
+          renderChatMessages();
+        }
+      }, 2600 + Math.random() * 1400)
+    ];
+  }
+
+  // ---- Mon espace : liste des discussions
+  function renderDashChats() {
+    const box = document.getElementById("dash-chats");
+    if (!box) return;
+    const list = myUpcomingMatches();
+    if (!list.length) {
+      box.innerHTML = `<p class="text-sm text-slate-400">Rejoins un match pour discuter avec les autres joueurs.</p>`;
+      return;
+    }
+    box.innerHTML = list.map(m => {
+      const sport = sportMeta(m.sportId);
+      const msgs = chatMessages(m);
+      const last = msgs[msgs.length - 1];
+      const unread = unreadCount(m);
+      return `
+        <a href="#chat/${m.id}" class="flex items-center gap-3 p-3 rounded-2xl bg-mates-off border ${unread ? "border-mates-green/50" : "border-slate-800"} hover:border-mates-green/60 transition-all">
+          <span class="text-3xl flex-shrink-0">${sport.icon}</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-bold text-white truncate">${escapeHtml(m.title)}</span>
+              <span class="text-[10px] text-slate-500 flex-shrink-0">${last ? formatAgo(last.at) : ""}</span>
+            </div>
+            <div class="text-xs ${unread ? "text-white font-semibold" : "text-slate-400"} truncate">
+              ${last ? `${last.system ? "" : escapeHtml(last.mine ? "Toi" : last.author.split(" ")[0]) + " : "}${escapeHtml(last.text)}` : "Aucun message"}
+            </div>
+          </div>
+          ${unread ? `<span class="min-w-[1.5rem] h-6 px-1.5 rounded-full bg-mates-green text-mates-dark text-xs font-extrabold flex items-center justify-center">${unread}</span>` : ""}
+        </a>`;
+    }).join("");
   }
 
   async function shareMatch(matchId, mode) {
@@ -3108,7 +3416,10 @@ const MatesApp = (() => {
               <div class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Coup d'envoi dans</div>
               <div id="dash-countdown" class="font-display text-4xl text-mates-green">${countdownText(start)}</div>
             </div>
-            <button onclick="MatesApp.openMatchDetail('${next.id}')" class="btn-outline-neon text-xs py-2 px-4">Détails & chat</button>
+            <div class="flex flex-col gap-2">
+              <a href="#chat/${next.id}" class="btn-neon text-xs py-2 px-4"><i data-lucide="message-circle" class="w-4 h-4"></i><span>Chat${unreadCount(next) ? ` (${unreadCount(next)})` : ""}</span></a>
+              <button onclick="MatesApp.openMatchDetail('${next.id}')" class="btn-outline-neon text-xs py-2 px-4">Détails</button>
+            </div>
           </div>
           <div class="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div class="text-sm">
@@ -3265,6 +3576,7 @@ const MatesApp = (() => {
     joinMatch,
     leaveMatch,
     sendChatMessage,
+    sendQuickReply,
     shareMatch,
     setMatchesWhen,
     openProposeMatchModal,
