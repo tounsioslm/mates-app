@@ -31,6 +31,7 @@ const MatesApp = (() => {
     }
   })();
   // Moyens de connexion activés dans Supabase (voir js/supabase-config.js)
+  const GOOGLE_CLIENT_ID = (SB && MATES_SUPABASE_CONFIG.googleClientId) || "";
   const PROVIDERS = {
     google: { label: "Google", enabled: !!(SB && MATES_SUPABASE_CONFIG.googleEnabled) }
   };
@@ -74,6 +75,7 @@ const MatesApp = (() => {
     // Inscription : étape en cours de l'assistant de profil
     onboardingStep: 1,
     avatarTarget: "edit",
+    googleNonce: "",
     // Chat de match
     chatMatchId: null,
     remoteChat: {}
@@ -773,6 +775,13 @@ const MatesApp = (() => {
         break;
 
       case "home":
+        // Visiteur pas encore inscrit : page de bienvenue (comme la page d'accueil de Playtomic)
+        if (!state.isAuthenticated) {
+          setTitle(null);
+          showView("view-welcome");
+          renderWelcome();
+          break;
+        }
         setTitle(null);
         showView("view-home");
         break;
@@ -844,6 +853,7 @@ const MatesApp = (() => {
         setTitle(state.authMode === "register" ? "Inscription" : "Connexion");
         showView("view-auth");
         showAuthPanel("main");
+        renderGoogleButton();
         updateAuthCard();
         break;
 
@@ -2069,6 +2079,7 @@ const MatesApp = (() => {
   function toggleAuthMode() {
     state.authMode = state.authMode === "login" ? "register" : "login";
     updateAuthCard();
+    renderGoogleButton();
   }
 
   function updateAuthCard() {
@@ -2106,6 +2117,88 @@ const MatesApp = (() => {
       const el = document.getElementById(id);
       if (el) el.classList.remove("hidden");
     });
+  }
+
+  /* ---- Bouton Google officiel (Google Identity Services)
+     Google affiche alors l'adresse du site (et, une fois validé, le nom « Mates »)
+     au lieu de l'adresse technique de Supabase. */
+  let gisLoading = null;
+
+  function loadGoogleScript() {
+    if (window.google && window.google.accounts && window.google.accounts.id) return Promise.resolve();
+    if (!gisLoading) {
+      gisLoading = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://accounts.google.com/gsi/client";
+        s.async = true;
+        s.onload = resolve;
+        s.onerror = () => { gisLoading = null; reject(new Error("gsi")); };
+        document.head.appendChild(s);
+      });
+    }
+    return gisLoading;
+  }
+
+  async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function renderGoogleButton() {
+    const slot = document.getElementById("google-signin-slot");
+    const fallback = document.getElementById("google-fallback-btn");
+    if (!slot || !GOOGLE_CLIENT_ID || !PROVIDERS.google.enabled || !window.crypto || !crypto.subtle) return;
+    try {
+      await loadGoogleScript();
+    } catch (e) {
+      console.warn("Bouton Google indisponible, on garde la redirection classique.");
+      return;
+    }
+    // Nonce : protège contre la réutilisation d'un jeton Google volé
+    const raw = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, "0")).join("");
+    state.googleNonce = raw;
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: onGoogleCredential,
+      nonce: await sha256Hex(raw),
+      ux_mode: "popup",
+      context: state.authMode === "register" ? "signup" : "signin",
+      itp_support: true
+    });
+    slot.innerHTML = "";
+    const width = Math.min(400, Math.max(220, (slot.parentElement || slot).clientWidth || 320));
+    google.accounts.id.renderButton(slot, {
+      type: "standard",
+      theme: "outline",
+      size: "large",
+      shape: "pill",
+      text: state.authMode === "register" ? "signup_with" : "continue_with",
+      logo_alignment: "center",
+      locale: "fr",
+      width
+    });
+    slot.classList.remove("hidden");
+    if (fallback) fallback.classList.add("hidden");
+  }
+
+  async function onGoogleCredential(response) {
+    if (!response || !response.credential) return;
+    try {
+      const { data, error } = await SB.auth.signInWithIdToken({
+        provider: "google",
+        token: response.credential,
+        nonce: state.googleNonce
+      });
+      if (error) throw error;
+      await applySession(data.session);
+      await loadRemoteMates();
+      const complete = isProfileComplete(state.userProfile);
+      showToast(complete ? `Content de te revoir, ${state.userProfile.firstName} !` : "Compte Google connecté ! Personnalise ton profil.", "success");
+      goAfterLogin();
+    } catch (err) {
+      showToast(translateAuthError(err), "warning");
+      renderGoogleButton(); // nouveau nonce pour un nouvel essai
+    }
   }
 
   async function handleOAuth(provider) {
