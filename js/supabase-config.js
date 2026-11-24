@@ -16,7 +16,9 @@
 const MATES_SUPABASE_CONFIG = {
   url: "",
   anonKey: "",
-  // Passe à true seulement après avoir activé Google dans
-  // Supabase > Authentication > Providers > Google
-  googleEnabled: false
+  // Passe chaque option à true seulement après avoir activé le fournisseur dans
+  // Supabase > Authentication > Providers (voir SUPABASE_SETUP.md)
+  googleEnabled: false, // Google
+  appleEnabled: false,  // Apple (compte Apple Developer requis)
+  phoneEnabled: false   // Téléphone : code par SMS (fournisseur SMS requis, ex. Twilio)
 };

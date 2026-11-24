@@ -56,7 +56,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Styles personnalisés -->
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body class="bg-mates-dark text-slate-100 min-h-screen flex flex-col font-sans selection:bg-mates-green selection:text-black">
 
@@ -77,9 +77,6 @@
       <nav class="hidden md:flex items-center gap-1 bg-mates-card/80 p-1.5 rounded-full border border-mates-border shadow-inner">
         <a href="#home" id="nav-home" class="nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300">
           Accueil
-        </a>
-        <a href="#mates" id="nav-mates" class="nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300">
-          Trouver un mate
         </a>
         <a href="#sports" id="nav-sports" class="nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300">
           Sports <span class="ml-1 text-xs px-2 py-0.5 rounded-full bg-mates-green/20 text-mates-green font-bold">14</span>
@@ -107,7 +104,6 @@
     <!-- Mobile Navigation Drawer -->
     <div id="mobile-drawer" class="md:hidden hidden bg-mates-card border-b border-mates-border px-4 py-4 space-y-2">
       <a href="#home" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Accueil</a>
-      <a href="#mates" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Trouver un mate</a>
       <a href="#sports" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Les 14 Sports</a>
       <a href="#matches" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Matchs ouverts</a>
       <a href="#" onclick="MatesApp.openCreateMatchModal(); return false;" class="mobile-nav-link block px-4 py-2 rounded-lg font-bold text-mates-green hover:bg-mates-cardElevated">+ Créer un match</a>
@@ -122,6 +118,188 @@
        CONTENEUR PRINCIPAL DE PAGES / ROUTEUR SPA
        ====================================================================== -->
   <main class="flex-grow">
+
+    <!-- ------------------------------------------------------------------
+         0. PAGE DE BIENVENUE (visiteurs pas encore inscrits)
+         ------------------------------------------------------------------ -->
+    <section id="view-welcome" class="page-view hidden fade-in">
+
+      <!-- HÉRO : grand titre + photos + recherche -->
+      <div class="relative overflow-hidden bg-gradient-to-br from-mates-card via-mates-dark to-mates-dark border-b border-mates-border">
+        <div class="absolute -left-40 -top-40 w-[34rem] h-[34rem] rounded-full bg-mates-green/10 blur-3xl pointer-events-none"></div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20 grid lg:grid-cols-2 gap-12 items-center relative">
+          <div class="space-y-7 text-center lg:text-left">
+            <h1 class="text-5xl sm:text-6xl lg:text-7xl text-white leading-[0.95]">
+              Trouve des <span class="text-mates-green">terrains</span><br>
+              et des <span class="text-mates-green">mates</span><br>
+              près de chez toi
+            </h1>
+            <p class="text-lg text-slate-300 max-w-xl mx-auto lg:mx-0">
+              Des matchs ouverts chaque soir, 14 sports, des joueurs de ton niveau.
+              Inscris-toi en 30 secondes et prends le terrain.
+            </p>
+
+            <!-- Recherche ville + sport -->
+            <form onsubmit="MatesApp.welcomeSearch(event)" class="bg-white rounded-full p-1.5 pl-5 flex items-center gap-2 max-w-xl mx-auto lg:mx-0 shadow-2xl">
+              <i data-lucide="search" class="w-5 h-5 text-slate-500 flex-shrink-0"></i>
+              <label for="welcome-city" class="sr-only">Ville</label>
+              <input id="welcome-city" list="welcome-city-list" type="text" placeholder="Ville : Liège, Namur..." class="flex-1 min-w-0 bg-transparent text-slate-900 placeholder-slate-500 text-sm font-medium focus:outline-none py-2.5">
+              <datalist id="welcome-city-list"></datalist>
+              <label for="welcome-sport" class="sr-only">Sport</label>
+              <select id="welcome-sport" class="hidden sm:block bg-slate-100 text-slate-900 text-sm font-semibold rounded-full px-3 py-2.5 focus:outline-none max-w-[9.5rem]"></select>
+              <button type="submit" class="bg-mates-green text-mates-dark font-extrabold text-sm rounded-full px-5 py-3 hover:brightness-110 transition-all">Chercher</button>
+            </form>
+
+            <div class="flex flex-wrap items-center justify-center lg:justify-start gap-3">
+              <a href="#auth/register" class="btn-neon text-base shadow-lg">
+                <i data-lucide="user-plus" class="w-5 h-5"></i>
+                <span>Créer mon compte gratuit</span>
+              </a>
+              <a href="#auth/login" class="text-sm font-semibold text-slate-300 hover:text-white px-3 py-2">J'ai déjà un compte</a>
+            </div>
+            <div class="flex items-center justify-center lg:justify-start gap-2 text-xs text-slate-400">
+              <span class="font-semibold">Avec</span>
+              <span class="px-2 py-1 rounded-full bg-white/10 text-white font-bold">Google</span>
+              <span class="px-2 py-1 rounded-full bg-white/10 text-white font-bold">Apple</span>
+              <span class="px-2 py-1 rounded-full bg-white/10 text-white font-bold">Téléphone</span>
+              <span class="px-2 py-1 rounded-full bg-white/10 text-white font-bold">Email</span>
+            </div>
+          </div>
+
+          <!-- Mosaïque de photos -->
+          <div class="relative h-[22rem] sm:h-[28rem] hidden sm:block">
+            <img src="https://images.unsplash.com/photo-1612534847738-b3af9bc31f0c?auto=format&fit=crop&w=900&q=75" alt="Joueur de padel avec sa raquette" class="absolute right-0 top-0 w-[72%] h-[78%] object-cover rounded-[2.5rem] rounded-tr-[6rem] shadow-2xl ring-1 ring-white/10">
+            <img src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?auto=format&fit=crop&w=600&q=75" alt="Terrain de foot éclairé le soir" class="absolute left-0 bottom-0 w-[46%] h-[48%] object-cover rounded-[2rem] shadow-2xl ring-4 ring-mates-dark">
+            <img src="https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=500&q=75" alt="Ballon de basket qui entre dans le panier" class="absolute right-6 bottom-2 w-[34%] h-[30%] object-cover rounded-[1.5rem] shadow-2xl ring-4 ring-mates-dark">
+            <div class="absolute left-4 top-10 bg-mates-card/95 border border-mates-border rounded-2xl px-4 py-3 shadow-xl flex items-center gap-3">
+              <span class="w-2.5 h-2.5 rounded-full bg-mates-green animate-pulse"></span>
+              <div class="leading-tight">
+                <div class="text-sm font-bold text-white" id="welcome-live-count">Matchs ce soir</div>
+                <div class="text-[11px] text-slate-400">Il manque un joueur ? C'est toi.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+        <!-- C'EST QUOI MATES ? -->
+        <div class="py-16 grid lg:grid-cols-5 gap-10 items-center">
+          <div class="lg:col-span-3 space-y-4">
+            <h2 class="text-4xl sm:text-5xl text-white">C'est quoi <span class="hl-e">Mates</span> ?</h2>
+            <p class="text-slate-300 leading-relaxed">
+              Mates est l'appli belge des sportifs amateurs. On t'aide à trouver des partenaires de ton niveau,
+              à rejoindre des matchs ouverts et à partager le prix du terrain, sans passer ta soirée sur les groupes WhatsApp.
+            </p>
+            <p class="text-slate-400 leading-relaxed text-sm">
+              Padel, foot, tennis, basket, badminton... Que tu cherches un 4e pour ton padel de ce soir ou une équipe pour le week-end,
+              ta communauté sportive est là, à Liège, Bruxelles, Namur et Charleroi.
+            </p>
+          </div>
+          <div class="lg:col-span-2 grid grid-cols-2 gap-3">
+            <div class="bg-mates-card border border-mates-border rounded-3xl p-5"><div class="text-4xl font-display text-mates-green">14</div><div class="text-xs text-slate-400 font-semibold mt-1">sports, du padel au volley</div></div>
+            <div class="bg-mates-card border border-mates-border rounded-3xl p-5"><div class="text-4xl font-display text-mates-green">4</div><div class="text-xs text-slate-400 font-semibold mt-1">villes en Wallonie et à Bruxelles</div></div>
+            <div class="bg-mates-card border border-mates-border rounded-3xl p-5"><div class="text-4xl font-display text-mates-green">0 €</div><div class="text-xs text-slate-400 font-semibold mt-1">pour créer ton profil</div></div>
+            <div class="bg-mates-card border border-mates-border rounded-3xl p-5"><div class="text-4xl font-display text-mates-green">5</div><div class="text-xs text-slate-400 font-semibold mt-1">niveaux pour jouer à armes égales</div></div>
+          </div>
+        </div>
+
+        <!-- MATCHS OUVERTS (carrousel) -->
+        <div class="pb-16 space-y-6">
+          <div class="flex items-end justify-between gap-4">
+            <h2 class="text-3xl sm:text-4xl text-white">Matchs ouverts <span class="hl-e">près de toi</span></h2>
+            <a href="#matches" class="text-sm font-bold text-mates-green hover:underline whitespace-nowrap">Tout voir →</a>
+          </div>
+          <div id="welcome-matches" class="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-3 -mx-4 px-4 sm:mx-0 sm:px-0"></div>
+        </div>
+
+        <!-- MATES POUR LES JOUEURS : 3 étapes -->
+        <div class="pb-16 space-y-8">
+          <h2 class="text-3xl sm:text-4xl text-white text-center">Mates, <span class="hl-e">pour les joueurs</span></h2>
+          <div class="grid md:grid-cols-3 gap-5">
+            <div class="bg-mates-card border border-mates-border rounded-3xl p-7 space-y-3">
+              <div class="w-12 h-12 rounded-2xl bg-mates-green text-mates-dark font-display text-2xl flex items-center justify-center">1</div>
+              <h3 class="text-xl font-bold text-white">Trouve</h3>
+              <p class="text-sm text-slate-400 leading-relaxed">Cherche un match ouvert près de chez toi ou crée le tien : privé entre potes, ou public pour trouver les joueurs qui manquent.</p>
+            </div>
+            <div class="bg-mates-card border border-mates-border rounded-3xl p-7 space-y-3">
+              <div class="w-12 h-12 rounded-2xl bg-mates-green text-mates-dark font-display text-2xl flex items-center justify-center">2</div>
+              <h3 class="text-xl font-bold text-white">Joue à ton niveau</h3>
+              <p class="text-sm text-slate-400 leading-relaxed">Chaque joueur indique son niveau par sport. Tu sais avec qui tu joues avant d'arriver : des matchs serrés, sans mauvaise surprise.</p>
+            </div>
+            <div class="bg-mates-card border border-mates-border rounded-3xl p-7 space-y-3">
+              <div class="w-12 h-12 rounded-2xl bg-mates-green text-mates-dark font-display text-2xl flex items-center justify-center">3</div>
+              <h3 class="text-xl font-bold text-white">Rejoins la communauté</h3>
+              <p class="text-sm text-slate-400 leading-relaxed">Chat de match, badges, fair-play : retrouve tes mates de la semaine dernière et agrandis ton cercle sportif.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TOUT DANS TA POCHE -->
+        <div class="pb-16">
+          <div class="bg-gradient-to-br from-mates-green to-lime-300 rounded-[2.5rem] p-8 sm:p-12 grid lg:grid-cols-2 gap-10 items-center text-mates-dark overflow-hidden">
+            <div class="space-y-5">
+              <h2 class="text-4xl sm:text-5xl text-mates-dark">Tout ton sport dans ta poche</h2>
+              <ul class="space-y-2.5 text-sm font-semibold">
+                <li class="flex gap-2.5"><i data-lucide="check-circle-2" class="w-5 h-5 flex-shrink-0"></i>Trouve des joueurs disponibles près de chez toi</li>
+                <li class="flex gap-2.5"><i data-lucide="check-circle-2" class="w-5 h-5 flex-shrink-0"></i>Rejoins un match en un clic, prix partagé affiché</li>
+                <li class="flex gap-2.5"><i data-lucide="check-circle-2" class="w-5 h-5 flex-shrink-0"></i>Active « Dispo ce soir » pour qu'on te propose des parties</li>
+                <li class="flex gap-2.5"><i data-lucide="check-circle-2" class="w-5 h-5 flex-shrink-0"></i>Discute avec les joueurs dans le chat du match</li>
+                <li class="flex gap-2.5"><i data-lucide="check-circle-2" class="w-5 h-5 flex-shrink-0"></i>Itinéraire Google Maps ou Waze jusqu'au terrain</li>
+                <li class="flex gap-2.5"><i data-lucide="check-circle-2" class="w-5 h-5 flex-shrink-0"></i>Fais progresser ton niveau et gagne des badges</li>
+              </ul>
+              <a href="#auth/register" class="inline-flex items-center gap-2 bg-mates-dark text-white font-bold rounded-full px-6 py-3.5 hover:bg-black transition-all">
+                <span>Créer mon profil</span>
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+              </a>
+            </div>
+            <!-- Téléphone dessiné en CSS -->
+            <div class="flex justify-center">
+              <div class="w-60 rounded-[2.5rem] bg-mates-dark p-3 shadow-2xl rotate-3 ring-4 ring-black/20">
+                <div class="rounded-[2rem] bg-mates-card overflow-hidden">
+                  <div class="px-4 pt-5 pb-3 flex items-center justify-between">
+                    <img src="assets/logo-m.png" alt="" class="h-6 w-auto">
+                    <span class="text-[10px] font-bold text-mates-green">⚡ Dispo ce soir</span>
+                  </div>
+                  <img src="https://images.unsplash.com/photo-1612534847738-b3af9bc31f0c?auto=format&fit=crop&w=400&h=220&q=70" alt="" class="w-full h-28 object-cover">
+                  <div class="p-4 space-y-2.5">
+                    <div class="text-[10px] font-bold text-mates-green uppercase">Padel • Liège</div>
+                    <div class="text-sm font-bold text-white">2 vs 2 du mardi soir</div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400"><span>20h00 • Niv. 3</span><span class="text-white font-bold">8 €</span></div>
+                    <div class="rounded-xl bg-mates-green text-mates-dark text-xs font-extrabold text-center py-2">Il reste 1 place</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VILLES -->
+        <div class="pb-16 space-y-6">
+          <h2 class="text-3xl sm:text-4xl text-white">Ta ville, <span class="hl-e">tes mates</span></h2>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <a href="#sport/padel/Liège" class="group bg-mates-card border border-mates-border hover:border-mates-green rounded-3xl p-6 transition-all"><div class="font-display text-3xl text-white group-hover:text-mates-green">Liège</div><div class="text-xs text-slate-400 mt-1">Voir les mates →</div></a>
+            <a href="#sport/padel/Bruxelles" class="group bg-mates-card border border-mates-border hover:border-mates-green rounded-3xl p-6 transition-all"><div class="font-display text-3xl text-white group-hover:text-mates-green">Bruxelles</div><div class="text-xs text-slate-400 mt-1">Voir les mates →</div></a>
+            <a href="#sport/padel/Namur" class="group bg-mates-card border border-mates-border hover:border-mates-green rounded-3xl p-6 transition-all"><div class="font-display text-3xl text-white group-hover:text-mates-green">Namur</div><div class="text-xs text-slate-400 mt-1">Voir les mates →</div></a>
+            <a href="#sport/padel/Charleroi" class="group bg-mates-card border border-mates-border hover:border-mates-green rounded-3xl p-6 transition-all"><div class="font-display text-3xl text-white group-hover:text-mates-green">Charleroi</div><div class="text-xs text-slate-400 mt-1">Voir les mates →</div></a>
+          </div>
+        </div>
+
+        <!-- APPEL FINAL -->
+        <div class="pb-6 text-center space-y-5">
+          <h2 class="text-4xl sm:text-5xl text-white">Prêt à prendre le <span class="swoosh-underline">terrain</span> ?</h2>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <a href="#auth/register" class="btn-neon text-base">
+              <i data-lucide="user-plus" class="w-5 h-5"></i>
+              <span>Créer mon compte gratuit</span>
+            </a>
+            <a href="#home" class="btn-outline-neon text-base">Explorer sans compte</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
 
     <!-- ------------------------------------------------------------------
          1. ÉCRAN ACCUEIL (Wireframe 1)
@@ -174,9 +352,9 @@
 
               <!-- Deux boutons d'action (Wireframe 1) -->
               <div class="flex flex-wrap items-center justify-center lg:justify-start gap-4">
-                <a href="#mates" class="btn-neon text-base shadow-lg">
-                  <i data-lucide="users" class="w-5 h-5"></i>
-                  <span>Trouver un mate</span>
+                <a href="#matches" class="btn-neon text-base shadow-lg">
+                  <i data-lucide="swords" class="w-5 h-5"></i>
+                  <span>Rejoindre un match</span>
                 </a>
                 <a href="#sports" class="btn-outline-neon text-base">
                   <i data-lucide="grid" class="w-5 h-5"></i>
@@ -360,8 +538,8 @@
               <h4 class="text-2xl font-bold text-white">Prêt à trouver ton prochain mate ?</h4>
               <p class="text-slate-400 text-sm">Découvre les joueurs disponibles ce soir près de chez toi.</p>
             </div>
-            <a href="#mates" class="btn-neon whitespace-nowrap">
-              <span>Voir les mates disponibles</span>
+            <a href="#sports" class="btn-neon whitespace-nowrap">
+              <span>Choisir mon sport</span>
               <i data-lucide="arrow-right" class="w-5 h-5"></i>
             </a>
           </div>
@@ -372,38 +550,67 @@
     </section>
 
     <!-- ------------------------------------------------------------------
-         2. ÉCRAN RECHERCHE DE MATES (Wireframe 2)
+         3. ÉCRAN LISTE DES SPORTS (Wireframe 3)
          ------------------------------------------------------------------ -->
-    <section id="view-mates" class="page-view hidden fade-in py-10">
+    <section id="view-sports" class="page-view hidden fade-in py-10">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         
-        <!-- En-tête de page -->
+        <!-- En-tête (Wireframe 3: Titre « Les sports ») -->
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-mates-border pb-6">
           <div>
-            <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Communauté sportive</div>
-            <h1 class="text-4xl sm:text-5xl text-white">Trouve ton <span class="hl-e">mate</span></h1>
-            <p class="text-slate-400 mt-2 text-sm">Découvre les profils de sportifs amateurs de ton niveau prêts à fouler le terrain.</p>
+            <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Catalogue complet</div>
+            <h1 class="text-4xl sm:text-5xl text-white">Les <span class="hl-e">sports</span></h1>
+            <p class="text-slate-400 mt-2 text-sm">14 disciplines sportives avec leurs règles, terrains et mates dédiés.</p>
           </div>
-          <div class="text-sm text-slate-400">
-            <span id="mates-count-badge" class="font-bold text-white"><span class="inline-block w-5 h-3 align-middle rounded bg-slate-700 animate-pulse"></span></span> <span id="mates-count-label">mates trouvés</span>
+          <div class="relative w-full md:w-72">
+            <input type="text" id="search-sport-input" placeholder="Rechercher un sport..." class="w-full bg-mates-card border border-mates-border rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green placeholder:text-slate-500">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
           </div>
         </div>
 
-        <!-- BARRE DE FILTRES : sport, niveau, ville (Wireframe 2) -->
-        <div class="bg-mates-card border border-mates-border rounded-2xl p-5 shadow-lg">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
-            
-            <!-- Filtre Sport -->
-            <div>
-              <label for="filter-sport" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Sport
-              </label>
-              <select id="filter-sport" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green transition-all">
-                <option value="all">Tous les 14 sports</option>
-                <!-- Rempli dynamiquement -->
-              </select>
-            </div>
+        <!-- 14 CARTES SPORTS (Wireframe 3: icône, nom, description courte, mène à la page du sport) -->
+        <div id="all-sports-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <!-- Rempli dynamiquement par JS -->
+        </div>
 
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------------
+         4. ÉCRAN PAGE D'UN SPORT (Wireframe 4)
+         ------------------------------------------------------------------ -->
+    <section id="view-single-sport" class="page-view hidden fade-in py-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+        
+        <!-- Bouton retour -->
+        <div>
+          <a href="#sports" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            <span>Retour aux 14 sports</span>
+          </a>
+        </div>
+
+        <!-- BANDEAU : icône du sport, nom, slogan, bouton « Filtrer les mates » (Wireframe 4) -->
+        <div id="sport-hero-banner" class="bg-gradient-to-r from-mates-card via-mates-cardElevated to-slate-900 border border-mates-border rounded-3xl p-8 relative overflow-hidden shadow-2xl">
+          <!-- Injecté dynamiquement par JS -->
+        </div>
+
+        <!-- SECTION « Ils pratiquent [sport] » + filtres niveau / ville / dispo -->
+        <div id="sport-mates-section" class="space-y-6 scroll-mt-24">
+          <div class="flex flex-col md:flex-row md:items-end justify-between gap-2 border-b border-mates-border pb-4">
+            <div>
+              <h2 id="sport-mates-title" class="text-2xl font-bold text-white">Ils pratiquent ce sport</h2>
+              <p class="text-sm text-slate-400 mt-1">Filtre par niveau, ville ou dispo, puis propose une partie.</p>
+            </div>
+            <div class="text-sm text-slate-400">
+              <span id="mates-count-badge" class="font-bold text-white">0</span> <span id="mates-count-label">mates trouvés</span>
+            </div>
+          </div>
+
+        <!-- BARRE DE FILTRES : niveau, ville (ex-page « Trouver un mate ») -->
+        <div class="bg-mates-card border border-mates-border rounded-2xl p-5 shadow-lg">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-center">
+            
             <!-- Filtre Niveau -->
             <div>
               <div class="flex items-center gap-1.5 mb-1.5">
@@ -495,72 +702,6 @@
           </div>
         </div>
 
-      </div>
-    </section>
-
-    <!-- ------------------------------------------------------------------
-         3. ÉCRAN LISTE DES SPORTS (Wireframe 3)
-         ------------------------------------------------------------------ -->
-    <section id="view-sports" class="page-view hidden fade-in py-10">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        
-        <!-- En-tête (Wireframe 3: Titre « Les sports ») -->
-        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-mates-border pb-6">
-          <div>
-            <div class="text-xs font-bold text-mates-green uppercase tracking-widest mb-1">Catalogue complet</div>
-            <h1 class="text-4xl sm:text-5xl text-white">Les <span class="hl-e">sports</span></h1>
-            <p class="text-slate-400 mt-2 text-sm">14 disciplines sportives avec leurs règles, terrains et mates dédiés.</p>
-          </div>
-          <div class="relative w-full md:w-72">
-            <input type="text" id="search-sport-input" placeholder="Rechercher un sport..." class="w-full bg-mates-card border border-mates-border rounded-xl pl-9 pr-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green placeholder:text-slate-500">
-            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-          </div>
-        </div>
-
-        <!-- 14 CARTES SPORTS (Wireframe 3: icône, nom, description courte, mène à la page du sport) -->
-        <div id="all-sports-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          <!-- Rempli dynamiquement par JS -->
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ------------------------------------------------------------------
-         4. ÉCRAN PAGE D'UN SPORT (Wireframe 4)
-         ------------------------------------------------------------------ -->
-    <section id="view-single-sport" class="page-view hidden fade-in py-10">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
-        
-        <!-- Bouton retour -->
-        <div>
-          <a href="#sports" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors">
-            <i data-lucide="arrow-left" class="w-4 h-4"></i>
-            <span>Retour aux 14 sports</span>
-          </a>
-        </div>
-
-        <!-- BANDEAU : icône du sport, nom, slogan, bouton « Filtrer les mates » (Wireframe 4) -->
-        <div id="sport-hero-banner" class="bg-gradient-to-r from-mates-card via-mates-cardElevated to-slate-900 border border-mates-border rounded-3xl p-8 relative overflow-hidden shadow-2xl">
-          <!-- Injecté dynamiquement par JS -->
-        </div>
-
-        <!-- SECTION « Ils pratiquent [sport] » (Wireframe 4: Grille de cartes mates filtrées sur ce sport) -->
-        <div class="space-y-6">
-          <div class="flex items-center justify-between border-b border-mates-border pb-4">
-            <div>
-              <h2 id="sport-mates-title" class="text-2xl font-bold text-white">Ils pratiquent ce sport</h2>
-              <p class="text-sm text-slate-400 mt-1">Trouve un partenaire disponible pour réserver un créneau.</p>
-            </div>
-            <button id="sport-filter-action-btn" class="btn-outline-neon text-xs py-2 px-4">
-              <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
-              <span>Filtrer les mates de ce sport</span>
-            </button>
-          </div>
-
-          <!-- Grille de cartes mates du sport -->
-          <div id="sport-mates-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- Rempli par JS -->
-          </div>
         </div>
 
         <!-- SECTION « Terrains partenaires » (Playtomic touch) -->
@@ -585,9 +726,9 @@
         
         <!-- Bouton retour -->
         <div class="flex items-center justify-between">
-          <a href="#mates" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors">
+          <a href="#sports" onclick="if (history.length > 1) { history.back(); return false; }" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors">
             <i data-lucide="arrow-left" class="w-4 h-4"></i>
-            <span>Retour à la recherche</span>
+            <span>Retour</span>
           </a>
           <button id="propose-match-top-btn" class="btn-neon text-xs py-2 px-4">
             <i data-lucide="swords" class="w-4 h-4"></i>
@@ -711,7 +852,7 @@
               </div>
               <div class="space-y-1 text-center sm:text-left">
                 <h4 class="text-sm font-bold text-white">Photo de profil</h4>
-                <p class="text-xs text-slate-400">Clique sur l'avatar pour choisir une nouvelle photo ou renseigner une URL.</p>
+                <p class="text-xs text-slate-400">Clique sur l'avatar pour choisir une photo depuis ton appareil.</p>
                 <input type="hidden" id="edit-avatar-url">
               </div>
             </div>
@@ -828,10 +969,10 @@
          ------------------------------------------------------------------ -->
     <section id="view-auth" class="page-view hidden fade-in py-16">
       <div class="max-w-md mx-auto px-4">
-        
+
         <!-- CARTE CENTRALE AVEC TITRE (Wireframe 7) -->
         <div class="bg-mates-card border border-mates-border rounded-3xl p-8 shadow-2xl space-y-6 relative overflow-hidden">
-          
+
           <!-- Halo décoratif -->
           <div class="absolute -top-16 -right-16 w-36 h-36 bg-mates-green/20 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -844,75 +985,236 @@
             <p id="auth-subtitle" class="text-xs text-slate-400">Rejoins des milliers de sportifs passionnés près de chez toi.</p>
           </div>
 
-          <!-- Bouton de connexion Google (Wireframe 7) -->
-          <button type="button" onclick="MatesApp.handleGoogleAuth()" class="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-sm">
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-            </svg>
-            <span class="text-sm">Continuer avec Google</span>
-          </button>
-
-          <!-- Séparateur -->
-          <div class="flex items-center gap-4 text-xs text-slate-500 uppercase tracking-wider">
-            <span class="flex-grow h-px bg-mates-border"></span>
-            <span>ou par email</span>
-            <span class="flex-grow h-px bg-mates-border"></span>
+          <!-- CONNEXION EN UN CLIC : Google, Apple, téléphone -->
+          <div id="auth-providers" class="space-y-3">
+            <button type="button" onclick="MatesApp.handleOAuth('google')" class="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-sm">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span class="text-sm">Continuer avec Google</span>
+            </button>
+            <button type="button" onclick="MatesApp.handleOAuth('apple')" class="w-full bg-black hover:bg-slate-900 text-white border border-slate-700 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-sm">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.96-3.46-1.07-1.56-2.73-1.78-3.32-1.8-1.41-.14-2.76.83-3.47.83-.72 0-1.82-.81-2.99-.79-1.54.02-2.96.9-3.75 2.27-1.6 2.78-.41 6.89 1.15 9.14.76 1.1 1.67 2.34 2.86 2.3 1.15-.05 1.58-.74 2.97-.74 1.38 0 1.77.74 2.99.72 1.24-.02 2.02-1.12 2.77-2.23.88-1.28 1.24-2.52 1.26-2.59-.03-.01-2.41-.93-2.43-3.65zM14.1 5.86c.63-.77 1.06-1.83.94-2.9-.91.04-2.02.61-2.67 1.37-.58.67-1.1 1.76-.96 2.8 1.02.08 2.06-.52 2.69-1.27z"/>
+              </svg>
+              <span class="text-sm">Continuer avec Apple</span>
+            </button>
+            <button type="button" onclick="MatesApp.showAuthPanel('phone')" class="w-full bg-mates-cardElevated hover:border-mates-green border border-mates-border text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition-all">
+              <i data-lucide="smartphone" class="w-5 h-5 text-mates-green"></i>
+              <span class="text-sm">Continuer avec mon numéro</span>
+            </button>
           </div>
 
-          <!-- Formulaire Email & Mot de passe (Wireframe 7) -->
-          <form id="auth-form" onsubmit="MatesApp.handleAuthSubmit(event)" class="space-y-4">
-            
-            <div id="auth-name-fields" class="hidden space-y-4">
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Prénom</label>
-                  <input type="text" id="auth-firstname" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="Lucas">
-                </div>
-                <div>
-                  <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Nom</label>
-                  <input type="text" id="auth-lastname" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="Simon">
-                </div>
+          <!-- CONNEXION PAR SMS (code à 6 chiffres) -->
+          <div id="auth-phone-panel" class="hidden space-y-4">
+            <form id="auth-phone-form" onsubmit="MatesApp.sendPhoneCode(event)" class="space-y-3">
+              <label for="auth-phone" class="block text-xs font-bold text-slate-300 uppercase tracking-wider">Ton numéro de téléphone</label>
+              <div class="flex gap-2">
+                <label for="auth-phone-country" class="sr-only">Indicatif</label>
+                <select id="auth-phone-country" class="bg-mates-cardElevated border border-mates-border rounded-xl px-2.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green">
+                  <option value="+32">🇧🇪 +32</option>
+                  <option value="+33">🇫🇷 +33</option>
+                  <option value="+352">🇱🇺 +352</option>
+                  <option value="+31">🇳🇱 +31</option>
+                </select>
+                <input type="tel" id="auth-phone" inputmode="tel" autocomplete="tel-national" required class="flex-1 min-w-0 bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="470 12 34 56">
+              </div>
+              <button type="submit" id="auth-phone-send-btn" class="w-full btn-neon py-3 text-sm font-bold">
+                <span>Recevoir mon code par SMS</span>
+                <i data-lucide="message-square" class="w-4 h-4"></i>
+              </button>
+            </form>
+
+            <form id="auth-otp-form" onsubmit="MatesApp.verifyPhoneCode(event)" class="hidden space-y-3">
+              <label for="auth-otp" class="block text-xs font-bold text-slate-300 uppercase tracking-wider">Code reçu par SMS</label>
+              <p id="auth-otp-hint" class="text-xs text-slate-400"></p>
+              <input type="text" id="auth-otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-3 text-center text-2xl tracking-[0.5em] font-bold text-white focus:outline-none focus:border-mates-green" placeholder="••••••">
+              <button type="submit" id="auth-otp-btn" class="w-full btn-neon py-3 text-sm font-bold">
+                <span>Valider le code</span>
+                <i data-lucide="check" class="w-4 h-4"></i>
+              </button>
+              <button type="button" onclick="MatesApp.showAuthPanel('phone')" class="w-full text-xs text-slate-400 hover:text-mates-green">Changer de numéro</button>
+            </form>
+
+            <button type="button" onclick="MatesApp.showAuthPanel('main')" class="w-full text-xs text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
+              <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+              <span>Autres moyens de connexion</span>
+            </button>
+          </div>
+
+          <div id="auth-email-block" class="space-y-6">
+            <!-- Séparateur -->
+            <div class="flex items-center gap-4 text-xs text-slate-500 uppercase tracking-wider">
+              <span class="flex-grow h-px bg-mates-border"></span>
+              <span>ou par email</span>
+              <span class="flex-grow h-px bg-mates-border"></span>
+            </div>
+
+            <!-- Formulaire Email & Mot de passe (Wireframe 7) -->
+            <form id="auth-form" onsubmit="MatesApp.handleAuthSubmit(event)" class="space-y-4">
+              <div>
+                <label for="auth-email" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Email</label>
+                <input type="email" id="auth-email" required autocomplete="email" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="nom@exemple.com">
+              </div>
+
+              <div>
+                <label for="auth-password" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Mot de passe</label>
+                <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="••••••••">
+                <p id="auth-password-hint" class="hidden text-[11px] text-slate-500 mt-1">6 caractères minimum. Tu personnaliseras ton profil juste après.</p>
+              </div>
+
+              <!-- Bouton principal de connexion / inscription (Wireframe 7) -->
+              <button type="submit" id="auth-submit-btn" class="w-full btn-neon py-3 text-sm font-bold shadow-lg mt-2">
+                <span>Se connecter</span>
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+              </button>
+            </form>
+
+            <!-- Liens « Mot de passe oublié ? » et « Pas de compte ? S'inscrire » (Wireframe 7) -->
+            <div class="space-y-3 text-center text-xs text-slate-400 pt-2 border-t border-mates-border">
+              <button type="button" id="auth-forgot-btn" onclick="MatesApp.handleForgotPassword()" class="hover:text-mates-green transition-colors">
+                Mot de passe oublié ?
+              </button>
+              <div>
+                <span id="auth-toggle-question">Pas encore de compte ?</span>
+                <button type="button" id="auth-toggle-btn" onclick="MatesApp.toggleAuthMode()" class="text-mates-green font-bold hover:underline ml-1">
+                  S'inscrire
+                </button>
               </div>
             </div>
-
-            <div>
-              <label for="auth-email" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Email</label>
-              <input type="email" id="auth-email" required class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="nom@exemple.com">
-            </div>
-
-            <div>
-              <label for="auth-password" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Mot de passe</label>
-              <input type="password" id="auth-password" required minlength="6" autocomplete="current-password" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="••••••••">
-              <p id="auth-password-hint" class="hidden text-[11px] text-slate-500 mt-1">6 caractères minimum.</p>
-            </div>
-
-            <!-- Bouton principal de connexion / inscription (Wireframe 7) -->
-            <button type="submit" id="auth-submit-btn" class="w-full btn-neon py-3 text-sm font-bold shadow-lg mt-2">
-              <span>Se connecter</span>
-              <i data-lucide="arrow-right" class="w-4 h-4"></i>
-            </button>
-          </form>
-
-          <!-- Liens « Mot de passe oublié ? » et « Pas de compte ? S'inscrire » (Wireframe 7) -->
-          <div class="space-y-3 text-center text-xs text-slate-400 pt-2 border-t border-mates-border">
-            <button type="button" id="auth-forgot-btn" onclick="MatesApp.handleForgotPassword()" class="hover:text-mates-green transition-colors">
-              Mot de passe oublié ?
-            </button>
-            <div>
-              <span id="auth-toggle-question">Pas encore de compte ?</span>
-              <button type="button" id="auth-toggle-btn" onclick="MatesApp.toggleAuthMode()" class="text-mates-green font-bold hover:underline ml-1">
-                S'inscrire
-              </button>
-            </div>
           </div>
+
+          <p class="text-[11px] text-slate-500 text-center leading-relaxed">
+            En continuant, tu acceptes que ton prénom, ta ville et tes sports soient visibles par les autres mates.
+          </p>
 
         </div>
 
       </div>
     </section>
+
+    <!-- ------------------------------------------------------------------
+         8. INSCRIPTION : PERSONNALISATION DU PROFIL (4 étapes)
+         ------------------------------------------------------------------ -->
+    <section id="view-onboarding" class="page-view hidden fade-in py-10">
+      <div class="max-w-2xl mx-auto px-4 space-y-6">
+
+        <!-- Progression -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between text-xs font-bold uppercase tracking-wider">
+            <span class="text-mates-green">Bienvenue sur Mates</span>
+            <span class="text-slate-400">Étape <span id="ob-step-num">1</span> / 4</span>
+          </div>
+          <div class="h-2 rounded-full bg-mates-cardElevated overflow-hidden">
+            <div id="ob-progress" class="h-full bg-mates-green rounded-full transition-all duration-500" style="width:25%"></div>
+          </div>
+        </div>
+
+        <div class="bg-mates-card border border-mates-border rounded-3xl p-6 sm:p-8 shadow-2xl">
+
+          <!-- ÉTAPE 1 : identité -->
+          <div class="ob-step" data-step="1">
+            <h1 class="text-3xl text-white">Qui es-<span class="hl-e">tu</span> ?</h1>
+            <p class="text-sm text-slate-400 mt-1 mb-6">Une photo et ta ville, c'est ce que les autres voient en premier.</p>
+
+            <div class="flex items-center gap-5 mb-6">
+              <button type="button" onclick="MatesApp.pickAvatar('onboarding')" class="relative group flex-shrink-0" aria-label="Choisir ma photo de profil">
+                <img id="ob-avatar" src="" alt="" class="w-24 h-24 rounded-full object-cover ring-4 ring-mates-border group-hover:ring-mates-green transition-all">
+                <span class="absolute -bottom-1 -right-1 w-9 h-9 rounded-full bg-mates-green text-mates-dark flex items-center justify-center shadow-lg">
+                  <i data-lucide="camera" class="w-4 h-4"></i>
+                </span>
+              </button>
+              <div>
+                <div class="text-sm font-bold text-white">Ta photo de profil</div>
+                <p class="text-xs text-slate-400 mt-0.5">Clique sur l'avatar pour choisir une photo depuis ton téléphone ou ton ordinateur.</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label for="ob-firstname" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">Prénom *</label>
+                <input type="text" id="ob-firstname" maxlength="40" autocomplete="given-name" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="Lucas">
+              </div>
+              <div>
+                <label for="ob-lastname" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">Nom</label>
+                <input type="text" id="ob-lastname" maxlength="40" autocomplete="family-name" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="Simon">
+              </div>
+              <div>
+                <label for="ob-age" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">Âge</label>
+                <input type="number" id="ob-age" min="13" max="99" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="22">
+              </div>
+              <div>
+                <label for="ob-city" class="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">Ville *</label>
+                <div class="flex gap-2">
+                  <input type="text" id="ob-city" list="ob-city-list" maxlength="60" autocomplete="address-level2" class="w-full min-w-0 bg-mates-cardElevated border border-mates-border rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="Liège">
+                  <datalist id="ob-city-list"></datalist>
+                  <button type="button" onclick="MatesApp.locateGps('ob-city')" title="Utiliser ma position" class="bg-mates-cardElevated border border-mates-border hover:border-mates-green text-slate-300 px-3 rounded-xl">
+                    <i data-lucide="crosshair" class="w-4 h-4 text-mates-green"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ÉTAPE 2 : sports + niveau -->
+          <div class="ob-step hidden" data-step="2">
+            <h1 class="text-3xl text-white">Tes <span class="hl-e">sports</span></h1>
+            <p class="text-sm text-slate-400 mt-1 mb-6">Choisis un ou plusieurs sports, puis indique ton niveau pour chacun.</p>
+            <div id="ob-sports-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5"></div>
+            <div id="ob-levels" class="space-y-2.5 mt-6"></div>
+          </div>
+
+          <!-- ÉTAPE 3 : disponibilités -->
+          <div class="ob-step hidden" data-step="3">
+            <h1 class="text-3xl text-white">Tes <span class="hl-e">dispos</span></h1>
+            <p class="text-sm text-slate-400 mt-1 mb-4">Quand es-tu libre pour jouer ? On te proposera des matchs à ces moments-là.</p>
+            <div class="flex flex-wrap gap-2 mb-4">
+              <button type="button" class="pill" onclick="MatesApp.presetAvailability('evenings')"><i data-lucide="moon" class="w-3.5 h-3.5"></i>Les soirs en semaine</button>
+              <button type="button" class="pill" onclick="MatesApp.presetAvailability('weekend')"><i data-lucide="calendar-days" class="w-3.5 h-3.5"></i>Le week-end</button>
+              <button type="button" class="pill" onclick="MatesApp.presetAvailability('clear')"><i data-lucide="eraser" class="w-3.5 h-3.5"></i>Tout effacer</button>
+            </div>
+            <div id="ob-availability" class="overflow-x-auto"></div>
+          </div>
+
+          <!-- ÉTAPE 4 : bio + aperçu -->
+          <div class="ob-step hidden" data-step="4">
+            <h1 class="text-3xl text-white">Ta <span class="hl-e">touche</span> perso</h1>
+            <p class="text-sm text-slate-400 mt-1 mb-4">Quelques mots pour donner envie de jouer avec toi.</p>
+            <div class="flex flex-wrap gap-2 mb-3">
+              <button type="button" class="pill" onclick="MatesApp.addBioTag('Je joue pour le fun 😄')">Pour le fun</button>
+              <button type="button" class="pill" onclick="MatesApp.addBioTag('Je veux progresser 📈')">Progresser</button>
+              <button type="button" class="pill" onclick="MatesApp.addBioTag('Esprit compétition 🏆')">Compétition</button>
+              <button type="button" class="pill" onclick="MatesApp.addBioTag('Toujours partant pour un afterwork 🍻')">Afterwork</button>
+            </div>
+            <label for="ob-bio" class="sr-only">Bio</label>
+            <textarea id="ob-bio" rows="3" maxlength="400" oninput="MatesApp.renderOnboardingPreview()" class="w-full bg-mates-cardElevated border border-mates-border rounded-xl p-4 text-sm text-white focus:outline-none focus:border-mates-green" placeholder="Ex : Padel le mardi soir, niveau 3, toujours partant pour un 2 vs 2 !"></textarea>
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mt-6 mb-2">Aperçu de ta carte</div>
+            <div id="ob-preview"></div>
+          </div>
+
+          <!-- Navigation -->
+          <div class="flex items-center justify-between gap-3 mt-8 pt-6 border-t border-mates-border">
+            <button type="button" id="ob-back" onclick="MatesApp.onboardingBack()" class="btn-outline-neon text-sm py-2.5 px-5">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+              <span>Retour</span>
+            </button>
+            <div class="flex items-center gap-3">
+              <button type="button" id="ob-skip" onclick="MatesApp.onboardingNext(true)" class="text-xs text-slate-400 hover:text-white">Plus tard</button>
+              <button type="button" id="ob-next" onclick="MatesApp.onboardingNext()" class="btn-neon text-sm py-2.5 px-6">
+                <span>Continuer</span>
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sélecteur de photo (partagé : inscription + édition du profil) -->
+    <input type="file" id="avatar-file-input" accept="image/*" class="hidden" onchange="MatesApp.onAvatarFile(event)">
 
     <!-- ------------------------------------------------------------------
          EXTRA : MATCHS OUVERTS (Style Playtomic)
@@ -1023,7 +1325,7 @@
   <!-- Barre d'onglets mobile -->
   <nav class="bottom-tabbar" aria-label="Navigation principale mobile">
     <a href="#home" data-tab="home"><i data-lucide="home" class="w-5 h-5"></i><span>Accueil</span></a>
-    <a href="#mates" data-tab="mates"><i data-lucide="users" class="w-5 h-5"></i><span>Mates</span></a>
+    <a href="#sports" data-tab="sports"><i data-lucide="layout-grid" class="w-5 h-5"></i><span>Sports</span></a>
     <a href="#matches" data-tab="matches"><i data-lucide="swords" class="w-5 h-5"></i><span>Matchs</span></a>
     <a href="#dashboard" data-tab="dashboard"><i data-lucide="user" class="w-5 h-5"></i><span>Profil</span></a>
   </nav>
@@ -1059,7 +1361,6 @@
           <div class="text-xs font-bold text-white uppercase tracking-wider mb-3">Navigation</div>
           <ul class="space-y-2 text-xs">
             <li><a href="#home" class="hover:text-mates-green transition-colors">Accueil</a></li>
-            <li><a href="#mates" class="hover:text-mates-green transition-colors">Trouver un mate</a></li>
             <li><a href="#sports" class="hover:text-mates-green transition-colors">Les 14 sports</a></li>
             <li><a href="#matches" class="hover:text-mates-green transition-colors">Matchs ouverts</a></li>
           </ul>
@@ -1069,9 +1370,9 @@
         <div class="space-y-2">
           <div class="text-xs font-bold text-white uppercase tracking-wider mb-3">Villes</div>
           <ul class="space-y-2 text-xs">
-            <li><a href="#mates/Liège" class="hover:text-mates-green transition-colors">Padel & sport à Liège</a></li>
-            <li><a href="#mates/Bruxelles" class="hover:text-mates-green transition-colors">Padel & sport à Bruxelles</a></li>
-            <li><a href="#mates/Namur" class="hover:text-mates-green transition-colors">Padel & sport à Namur</a></li>
+            <li><a href="#sport/padel/Liège" class="hover:text-mates-green transition-colors">Padel & sport à Liège</a></li>
+            <li><a href="#sport/padel/Bruxelles" class="hover:text-mates-green transition-colors">Padel & sport à Bruxelles</a></li>
+            <li><a href="#sport/padel/Namur" class="hover:text-mates-green transition-colors">Padel & sport à Namur</a></li>
           </ul>
         </div>
 
@@ -1243,8 +1544,8 @@
 
   <!-- Scripts Application -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="js/supabase-config.js?v=4"></script>
-  <script src="js/data.js?v=4"></script>
-  <script src="js/app.js?v=4"></script>
+  <script src="js/supabase-config.js?v=5"></script>
+  <script src="js/data.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

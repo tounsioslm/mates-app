@@ -30,7 +30,13 @@ const MatesApp = (() => {
       return null;
     }
   })();
-  const GOOGLE_ENABLED = !!(SB && MATES_SUPABASE_CONFIG.googleEnabled);
+  // Moyens de connexion activés dans Supabase (voir js/supabase-config.js)
+  const PROVIDERS = {
+    google: { label: "Google", enabled: !!(SB && MATES_SUPABASE_CONFIG.googleEnabled) },
+    apple: { label: "Apple", enabled: !!(SB && MATES_SUPABASE_CONFIG.appleEnabled) },
+    phone: { label: "SMS", enabled: !!(SB && MATES_SUPABASE_CONFIG.phoneEnabled) }
+  };
+  const DEMO_SMS_CODE = "123456";
 
   const LEVELS = ["Débutant", "Intermédiaire", "Confirmé", "Expert"];
   const FEATURED_CITIES = ["Liège", "Bruxelles", "Namur"];
@@ -67,7 +73,11 @@ const MatesApp = (() => {
     // Données temporaires d'édition du profil
     editingProfile: null,
     pendingJoinMatchId: null,
-    pendingProposeMateId: null
+    pendingProposeMateId: null,
+    // Inscription : étape en cours de l'assistant de profil
+    onboardingStep: 1,
+    phoneTarget: "",
+    avatarTarget: "edit"
   };
 
   /**
@@ -551,7 +561,7 @@ const MatesApp = (() => {
   }
 
   function updateTabbar(route) {
-    const map = { home: "home", mates: "mates", mate: "mates", matches: "matches", match: "matches", dashboard: "dashboard", "edit-profile": "dashboard", auth: "dashboard" };
+    const map = { welcome: "home", home: "home", sports: "sports", sport: "sports", mate: "sports", matches: "matches", match: "matches", dashboard: "dashboard", "edit-profile": "dashboard", onboarding: "dashboard", auth: "dashboard" };
     const active = map[route] || "";
     document.querySelectorAll(".bottom-tabbar a").forEach(a => {
       a.classList.toggle("active", a.dataset.tab === active);
@@ -615,7 +625,8 @@ const MatesApp = (() => {
     }
 
     state.userProfile = profileFromRow(profileRow, true);
-    state.userProfile.email = user.email;
+    state.userProfile.email = user.email || "";
+    state.userProfile.phone = user.phone || "";
     state.isAuthenticated = true;
     if (profileRow.live_until) {
       state.liveUntil = new Date(profileRow.live_until).getTime() || 0;
@@ -643,16 +654,22 @@ const MatesApp = (() => {
     renderMatesGrid();
   }
 
+  function isProfileComplete(p) {
+    return !!(p && p.firstName && p.city && p.sports && p.sports.length);
+  }
+
   function goAfterLogin() {
-    const p = state.userProfile;
-    const incomplete = !p || !p.city || p.sports.length === 0;
-    window.location.hash = incomplete ? "#edit-profile" : "#dashboard";
+    // Nouveau compte (ou profil incomplet) -> assistant de personnalisation
+    window.location.hash = isProfileComplete(state.userProfile) ? "#dashboard" : "#onboarding";
   }
 
   function translateAuthError(err) {
     const m = String((err && err.message) || "").toLowerCase();
     console.warn("Erreur d'authentification :", err);
     if (m.includes("invalid login")) return "Email ou mot de passe incorrect.";
+    if (m.includes("provider is not enabled") || m.includes("unsupported provider")) return "Ce moyen de connexion n'est pas encore activé. Utilise ton email.";
+    if (m.includes("token") || m.includes("otp")) return "Code incorrect ou expiré. Redemande un code.";
+    if (m.includes("phone") || m.includes("sms")) return "Numéro de téléphone invalide ou SMS impossible à envoyer.";
     if (m.includes("already registered") || m.includes("already been registered")) return "Un compte existe déjà avec cet email. Connecte-toi !";
     if (m.includes("email not confirmed")) return "Confirme d'abord ton email (regarde ta boîte de réception).";
     if (m.includes("rate limit") || m.includes("security purposes")) return "Trop de tentatives, réessaie dans une minute.";
@@ -700,7 +717,7 @@ const MatesApp = (() => {
 
     // Authentification
     const savedAuth = localStorage.getItem(STORAGE_KEY_AUTH);
-    state.isAuthenticated = savedAuth !== null ? savedAuth === "true" : true;
+    state.isAuthenticated = savedAuth === "true";
 
     // Avec Supabase : personne n'est connecté tant que la session n'est pas vérifiée
     if (SB) {
@@ -724,7 +741,8 @@ const MatesApp = (() => {
   }
 
   function handleHashChange() {
-    const rawHash = window.location.hash.replace("#", "") || "home";
+    // Sans adresse précise : page de bienvenue pour les visiteurs pas encore inscrits
+    const rawHash = window.location.hash.replace("#", "") || (state.isAuthenticated ? "home" : "welcome");
     const parts = rawHash.split("/");
     const mainView = parts[0];
     let param = parts[1] || null;
@@ -749,22 +767,24 @@ const MatesApp = (() => {
 
     // Routage vers la vue demandée
     switch (mainView) {
+      case "welcome":
+        setTitle(null);
+        showView("view-welcome");
+        renderWelcome();
+        break;
+
       case "home":
         setTitle(null);
         showView("view-home");
         break;
 
-      case "mates":
-        if (param) {
-          state.filters.city = findCityOption(param) || "all";
-          const citySelect = document.getElementById("filter-city");
-          if (citySelect) citySelect.value = state.filters.city;
-        }
-        showView("view-mates");
-        renderMatesGrid();
-        updateMatesTitle();
-        syncLiveToggles();
-        break;
+      case "mates": {
+        // Ancienne page « Trouver un mate » : les mates sont maintenant dans chaque sport
+        const city = param ? (findCityOption(param) || "") : "";
+        const sport = state.filters.sport !== "all" ? state.filters.sport : null;
+        window.location.replace(sport ? `#sport/${sport}${city ? "/" + encodeURIComponent(city) : ""}` : "#sports");
+        return;
+      }
 
       case "sports":
         setTitle("Les 14 sports");
@@ -772,12 +792,20 @@ const MatesApp = (() => {
         renderSportsCatalog();
         break;
 
-      case "sport":
+      case "sport": {
         state.selectedSportId = param || "padel";
-        setTitle(sportMeta(state.selectedSportId).name);
+        let cityParam = parts[2] || null;
+        try { if (cityParam) cityParam = decodeURIComponent(cityParam); } catch (e) { cityParam = null; }
+        if (cityParam) {
+          state.filters.city = findCityOption(cityParam) || "all";
+          const citySelect = document.getElementById("filter-city");
+          if (citySelect) citySelect.value = state.filters.city;
+        }
         showView("view-single-sport");
         renderSingleSportPage(state.selectedSportId);
+        updateMatesTitle();
         break;
+      }
 
       case "mate":
         state.selectedMateId = param || "mate-1";
@@ -797,6 +825,17 @@ const MatesApp = (() => {
         initEditProfileForm();
         break;
 
+      case "onboarding":
+        if (!state.sessionReady) return;
+        if (!state.isAuthenticated) {
+          window.location.hash = "#auth/register";
+          return;
+        }
+        setTitle("Crée ton profil");
+        showView("view-onboarding");
+        startOnboarding();
+        break;
+
       case "auth":
         if (state.sessionReady && state.isAuthenticated && SB) {
           window.location.hash = "#dashboard";
@@ -805,6 +844,7 @@ const MatesApp = (() => {
         if (param === "register" || param === "login") state.authMode = param;
         setTitle(state.authMode === "register" ? "Inscription" : "Connexion");
         showView("view-auth");
+        showAuthPanel("main");
         updateAuthCard();
         break;
 
@@ -860,7 +900,7 @@ const MatesApp = (() => {
   function updateNavLinks(activeHash) {
     document.querySelectorAll(".nav-link").forEach(link => {
       const href = link.getAttribute("href") || "";
-      if (href === `#${activeHash}` || (activeHash === "sport" && href === "#sports") || (activeHash === "mate" && href === "#mates")) {
+      if (href === `#${activeHash}` || (activeHash === "sport" && href === "#sports")) {
         link.className = "nav-link px-5 py-2 rounded-full text-sm font-bold bg-mates-green text-mates-dark shadow-md transition-all";
       } else {
         link.className = "nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300";
@@ -925,18 +965,10 @@ const MatesApp = (() => {
       });
     }
 
-    // Filtres sur la recherche de Mates
-    const sportSelect = document.getElementById("filter-sport");
+    // Filtres des mates (page d'un sport)
     const levelSelect = document.getElementById("filter-level");
     const cityInput = document.getElementById("filter-city");
     const resetBtn = document.getElementById("filter-reset-btn");
-
-    if (sportSelect) {
-      sportSelect.addEventListener("change", (e) => {
-        state.filters.sport = e.target.value;
-        renderMatesGrid();
-      });
-    }
 
     if (levelSelect) {
       levelSelect.addEventListener("change", (e) => {
@@ -997,7 +1029,6 @@ const MatesApp = (() => {
    * Remplissage des sélecteurs de sports
    */
   function populateSportDropdowns() {
-    const filterSportSelect = document.getElementById("filter-sport");
     const addSportSelect = document.getElementById("add-new-sport-select");
     const proposeSportSelect = document.getElementById("propose-sport-select");
 
@@ -1008,9 +1039,6 @@ const MatesApp = (() => {
     const cmSport = document.getElementById("cm-sport");
     if (cmSport) cmSport.innerHTML = optionsHtml;
 
-    if (filterSportSelect) {
-      filterSportSelect.innerHTML = `<option value="all">Tous les 14 sports</option>` + optionsHtml;
-    }
     if (addSportSelect) {
       addSportSelect.innerHTML = `<option value="">Choisir un sport à ajouter...</option>` + optionsHtml;
     }
@@ -1125,7 +1153,7 @@ const MatesApp = (() => {
       p.classList.toggle("active", p.dataset.when === state.matesWhen);
       p.setAttribute("aria-pressed", p.dataset.when === state.matesWhen ? "true" : "false");
     });
-    if (state.currentRoute === "mates") updateMatesTitle();
+    if (state.currentRoute === "sport") updateMatesTitle();
 
     if (countBadge) {
       countBadge.textContent = filtered.length;
@@ -1226,6 +1254,67 @@ const MatesApp = (() => {
     renderMatesGrid();
   }
 
+  /* ==========================================================================
+     0. PAGE DE BIENVENUE (avant l'inscription)
+     ========================================================================== */
+  function renderWelcome() {
+    const sportSel = document.getElementById("welcome-sport");
+    if (sportSel && !sportSel.options.length) {
+      sportSel.innerHTML = INITIAL_SPORTS.map(s => `<option value="${s.id}">${s.icon} ${s.name}</option>`).join("");
+    }
+    const list = document.getElementById("welcome-city-list");
+    if (list) list.innerHTML = getCityOptions().map(c => `<option value="${escapeHtml(c)}"></option>`).join("");
+
+    const upcoming = state.matches
+      .filter(m => new Date(m.startsAt) > new Date() && remainingSlots(m) > 0)
+      .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+    const tonight = upcoming.filter(m => isTonight(new Date(m.startsAt))).length;
+    const live = document.getElementById("welcome-live-count");
+    if (live) live.textContent = tonight ? `${tonight} match${tonight > 1 ? "s" : ""} ce soir` : `${upcoming.length} matchs cette semaine`;
+
+    const box = document.getElementById("welcome-matches");
+    if (!box) return;
+    box.innerHTML = upcoming.slice(0, 8).map(m => {
+      const sport = sportMeta(m.sportId);
+      const start = new Date(m.startsAt);
+      const left = remainingSlots(m);
+      return `
+        <a href="#match/${m.id}" class="snap-start flex-shrink-0 w-64 bg-mates-card border border-mates-border hover:border-mates-green/60 rounded-3xl p-5 space-y-3 transition-all">
+          <div class="flex items-center justify-between">
+            <span class="text-3xl">${sport.icon}</span>
+            <span class="text-[11px] font-bold px-2 py-1 rounded-full bg-mates-green/15 text-mates-green">${left} place${left > 1 ? "s" : ""}</span>
+          </div>
+          <div>
+            <div class="text-[11px] font-bold text-mates-green uppercase tracking-wider">${sport.name} • ${escapeHtml(m.city)}</div>
+            <div class="font-bold text-white truncate">${escapeHtml(m.title)}</div>
+            <div class="text-xs text-slate-400 truncate">${escapeHtml(m.clubName)}</div>
+          </div>
+          <div class="flex items-center justify-between text-xs text-slate-300 pt-3 border-t border-mates-border">
+            <span>${formatMatchDay(start)} • ${formatHour(start)}</span>
+            <strong class="text-white">${priceLabel(m)}</strong>
+          </div>
+        </a>`;
+    }).join("") || `<p class="text-sm text-slate-400">Aucun match ouvert pour l'instant : crée le premier !</p>`;
+    lucide.createIcons();
+  }
+
+  function welcomeSearch(event) {
+    if (event) event.preventDefault();
+    const sport = (document.getElementById("welcome-sport") || {}).value || "padel";
+    const cityRaw = ((document.getElementById("welcome-city") || {}).value || "").trim();
+    const city = cityRaw ? findCityOption(cityRaw) : null;
+    if (cityRaw && !city) {
+      showToast(`Pas encore de mates à « ${cityRaw} ». Essaie Liège, Bruxelles, Namur ou Charleroi.`, "info");
+      return;
+    }
+    if (!city) {
+      state.filters.city = "all";
+      const c = document.getElementById("filter-city");
+      if (c) c.value = "all";
+    }
+    window.location.hash = `#sport/${sport}${city ? "/" + encodeURIComponent(city) : ""}`;
+  }
+
   function heroSearch(event) {
     if (event) event.preventDefault();
     const sport = document.getElementById("hero-sport");
@@ -1233,14 +1322,18 @@ const MatesApp = (() => {
     state.filters.sport = sport ? sport.value : "all";
     state.filters.city = city ? city.value : "all";
     state.filters.level = "all";
-    const fs = document.getElementById("filter-sport");
     const fc = document.getElementById("filter-city");
     const fl = document.getElementById("filter-level");
-    if (fs) fs.value = state.filters.sport;
     if (fc) fc.value = state.filters.city;
     if (fl) fl.value = "all";
-    if (window.location.hash === "#mates") handleHashChange();
-    else window.location.hash = "#mates";
+    if (state.filters.sport === "all") {
+      showToast("Choisis ton sport pour voir les mates" + (state.filters.city !== "all" ? ` à ${state.filters.city}` : "") + " !", "info");
+      window.location.hash = "#sports";
+      return;
+    }
+    const target = `#sport/${state.filters.sport}`;
+    if (window.location.hash === target) handleHashChange();
+    else window.location.hash = target;
   }
 
   function toggleLevelHelp(event) {
@@ -1272,11 +1365,9 @@ const MatesApp = (() => {
 
   function resetFilters() {
     state.matesWhen = null;
-    state.filters = { sport: "all", level: "all", city: "all" };
-    const s = document.getElementById("filter-sport");
+    state.filters = { sport: state.filters.sport, level: "all", city: "all" };
     const l = document.getElementById("filter-level");
     const c = document.getElementById("filter-city");
-    if (s) s.value = "all";
     if (l) l.value = "all";
     if (c) c.value = "all";
     renderMatesGrid();
@@ -1357,9 +1448,9 @@ const MatesApp = (() => {
 
           <!-- Bouton « Filtrer les mates » (Wireframe 4) -->
           <div class="flex flex-wrap items-center gap-3">
-            <button onclick="MatesApp.filterMatesForSport('${sport.id}')" class="btn-neon text-sm py-3 px-5 shadow-lg">
+            <button onclick="MatesApp.filterMatesForSport()" class="btn-neon text-sm py-3 px-5 shadow-lg">
               <i data-lucide="users" class="w-4 h-4"></i>
-              <span>Filtrer les mates</span>
+              <span>Voir les mates</span>
             </button>
             <button onclick="MatesApp.openBookingModal('${sport.id}')" class="btn-outline-neon text-sm py-3 px-5">
               <i data-lucide="calendar" class="w-4 h-4"></i>
@@ -1395,61 +1486,10 @@ const MatesApp = (() => {
       titleEl.textContent = `Ils pratiquent le ${sport.name}`;
     }
 
-    // Action filter button
-    const actionBtn = document.getElementById("sport-filter-action-btn");
-    if (actionBtn) {
-      actionBtn.onclick = () => filterMatesForSport(sport.id);
-    }
-
-    // Grille de cartes mates filtrées sur ce sport (Wireframe 4)
-    const matesGrid = document.getElementById("sport-mates-grid");
-    if (matesGrid) {
-      const sportMates = getAllMates().filter(m => m.sports.some(s => s.id === sport.id));
-      
-      if (sportMates.length === 0) {
-        matesGrid.innerHTML = `
-          <div class="col-span-3 text-center py-10 bg-mates-card rounded-2xl border border-dashed border-mates-border">
-            <p class="text-sm text-slate-400">Aucun mate n'est encore enregistré pour ce sport.</p>
-          </div>
-        `;
-      } else {
-        matesGrid.innerHTML = sportMates.map(mate => {
-          const sportInfo = mate.sports.find(s => s.id === sport.id);
-          return `
-            <div class="bg-mates-card border border-mates-border rounded-2xl p-5 hover:border-mates-green/60 transition-all flex flex-col justify-between">
-              <div>
-                <div class="flex items-center gap-3.5 mb-3">
-                  <a href="#mate/${mate.id}">
-                    <img src="${mate.avatar}" alt="${mate.firstName}" class="w-14 h-14 rounded-full object-cover ring-2 ring-mates-border hover:ring-mates-green transition-all">
-                  </a>
-                  <div>
-                    <a href="#mate/${mate.id}" class="font-bold text-white hover:text-mates-green transition-colors">
-                      ${mate.firstName}${mate.age ? `, ${mate.age} ans` : ""}
-                    </a>
-                    <div class="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                      <i data-lucide="map-pin" class="w-3 h-3 text-mates-green"></i>
-                      <span>${mate.city || "Ville non renseignée"}${mate.distanceKm != null ? ` • à ${mate.distanceKm} km` : ""}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="p-2.5 bg-mates-cardElevated rounded-xl border border-mates-border mb-3 text-xs flex justify-between items-center">
-                  <span class="text-slate-300">Niveau ${sport.name} :</span>
-                  <span class="font-bold text-mates-green">${sportInfo ? sportInfo.level : 'Intermédiaire'}</span>
-                </div>
-
-                <p class="text-xs text-slate-300 line-clamp-2 mb-4">${mate.bio ? `"${mate.bio}"` : "Nouveau sur Mates !"}</p>
-              </div>
-
-              <div class="pt-3 border-t border-mates-border flex gap-2">
-                <a href="#mate/${mate.id}" class="w-1/2 btn-outline-neon py-2 text-xs text-center">Profil</a>
-                <button onclick="MatesApp.openProposeMatchModal('${mate.id}')" class="w-1/2 btn-neon py-2 text-xs">Inviter</button>
-              </div>
-            </div>
-          `;
-        }).join("");
-      }
-    }
+    // Grille des mates de ce sport (filtres niveau / ville / dispo)
+    state.filters.sport = sport.id;
+    renderMatesGrid();
+    syncLiveToggles();
 
     // Section Terrains Partenaires
     const venuesGrid = document.getElementById("sport-venues-grid");
@@ -1505,11 +1545,9 @@ const MatesApp = (() => {
     lucide.createIcons();
   }
 
-  function filterMatesForSport(sportId) {
-    state.filters.sport = sportId;
-    const select = document.getElementById("filter-sport");
-    if (select) select.value = sportId;
-    window.location.hash = "#mates";
+  function filterMatesForSport() {
+    const section = document.getElementById("sport-mates-section");
+    if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /* ==========================================================================
@@ -1757,6 +1795,7 @@ const MatesApp = (() => {
     }
 
     renderEditAvailabilityMatrix();
+    renderObAvailability();
   }
 
   function addSportToProfile() {
@@ -1804,42 +1843,117 @@ const MatesApp = (() => {
     state.editingProfile.sports[index].rating = newLevel === "Expert" ? 5 : newLevel === "Confirmé" ? 4 : newLevel === "Intermédiaire" ? 3 : 2;
   }
 
-  function locateGps() {
-    const cityInput = document.getElementById("edit-city");
-    showToast("Recherche de la position GPS...", "info");
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          // Simulation précise pour la région liégeoise / belge
-          cityInput.value = "Liège";
-          showToast("Position GPS détectée : Liège !", "success");
-        },
-        (err) => {
-          // Fallback en cas de refus ou sandbox
-          cityInput.value = "Liège";
-          showToast("Position définie sur : Liège", "success");
-        },
-        { timeout: 5000 }
-      );
-    } else {
-      cityInput.value = "Liège";
-      showToast("Position par défaut : Liège", "info");
+  function locateGps(inputId) {
+    const cityInput = document.getElementById(inputId || "edit-city");
+    if (!cityInput) return;
+    if (!navigator.geolocation) {
+      showToast("La géolocalisation n'est pas disponible : tape ta ville.", "info");
+      return;
     }
+    showToast("Recherche de ta position...", "info");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        // Ville Mates la plus proche de la position
+        let best = null;
+        Object.keys(CITY_COORDS).forEach(key => {
+          const c = CITY_COORDS[key];
+          const d = Math.hypot(c.lat - pos.coords.latitude, (c.lon - pos.coords.longitude) * Math.cos(c.lat * Math.PI / 180));
+          if (!best || d < best.d) best = { key, d };
+        });
+        const city = best && (findCityOption(best.key) || best.key);
+        if (city) {
+          cityInput.value = city;
+          cityInput.dispatchEvent(new Event("input"));
+          showToast(`Ville la plus proche : ${city}`, "success");
+        }
+      },
+      () => showToast("Position indisponible : tape ta ville.", "info"),
+      { timeout: 8000 }
+    );
   }
 
   function triggerAvatarChange() {
-    const newUrl = prompt("Saisissez l'URL de votre photo de profil :", state.editingProfile.avatar);
-    if (newUrl && newUrl.trim()) {
-      if (SB && cleanAvatar(newUrl.trim()) === DEFAULT_AVATAR) {
-        showToast("L'adresse de la photo doit commencer par https://", "warning");
+    pickAvatar("edit");
+  }
+
+  function pickAvatar(target) {
+    state.avatarTarget = target;
+    const input = document.getElementById("avatar-file-input");
+    if (!input) return;
+    input.value = "";
+    input.click();
+  }
+
+  // Recadre la photo en carré et la réduit (léger à envoyer / stocker)
+  function resizeImage(file, size) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = size;
+        canvas.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(b => (b ? resolve(b) : reject(new Error("toBlob"))), "image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image illisible")); };
+      img.src = url;
+    });
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function onAvatarFile(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file || !state.editingProfile) return;
+    if (!/^image\//.test(file.type)) {
+      showToast("Choisis une image (JPG, PNG, HEIC...).", "warning");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      showToast("Cette photo est trop lourde (15 Mo maximum).", "warning");
+      return;
+    }
+
+    let blob;
+    try {
+      blob = await resizeImage(file, 400);
+    } catch (e) {
+      showToast("Impossible de lire cette image, essaie une autre photo.", "warning");
+      return;
+    }
+
+    let url;
+    if (SB && state.userProfile && state.userProfile.userId) {
+      showToast("Envoi de la photo...", "info");
+      const path = `${state.userProfile.userId}/avatar-${Date.now()}.jpg`;
+      const bucket = SB.storage.from("avatars");
+      const { error } = await bucket.upload(path, blob, { contentType: "image/jpeg", upsert: true });
+      if (error) {
+        console.warn("Envoi de la photo impossible :", error.message);
+        showToast("Envoi de la photo impossible, réessaie plus tard.", "warning");
         return;
       }
-      state.editingProfile.avatar = newUrl.trim();
-      const preview = document.getElementById("edit-avatar-preview");
-      if (preview) preview.src = newUrl.trim();
-      showToast("Photo mise à jour !", "success");
+      url = bucket.getPublicUrl(path).data.publicUrl;
+    } else {
+      url = await blobToDataUrl(blob);
     }
+
+    state.editingProfile.avatar = url;
+    ["edit-avatar-preview", "ob-avatar"].forEach(id => {
+      const img = document.getElementById(id);
+      if (img) img.src = url;
+    });
+    if (state.currentRoute === "onboarding") renderOnboardingPreview();
+    showToast("Photo ajoutée !", "success");
   }
 
   async function saveProfile(event) {
@@ -1862,16 +1976,26 @@ const MatesApp = (() => {
     state.editingProfile.city = city;
     state.editingProfile.bio = bio;
 
-    // Comptes réels : enregistrement dans Supabase
+    if (!(await persistProfile(state.editingProfile))) return;
+    showToast(SB ? "Profil enregistré ! Les autres mates voient déjà tes changements." : "Profil enregistré avec succès !", "success");
+
+    // Redirection vers le profil public
+    setTimeout(() => {
+      window.location.hash = "#mate/my-profile";
+    }, 800);
+  }
+
+  // Enregistre le profil (Supabase si comptes réels, sinon navigateur)
+  async function persistProfile(p) {
     if (SB && state.userProfile && state.userProfile.userId) {
-      const p = state.editingProfile;
+      const age = parseInt(p.age, 10);
       const row = {
         id: state.userProfile.userId,
-        first_name: cleanText(fn, 40),
-        last_name: cleanText(ln, 40),
+        first_name: cleanText(p.firstName, 40),
+        last_name: cleanText(p.lastName, 40),
         age: Number.isInteger(age) && age >= 13 && age <= 99 ? age : null,
-        city: cleanText(findCityOption(city) || city.split("(")[0], 60),
-        bio: cleanText(bio, 400),
+        city: cleanText(findCityOption(p.city) || String(p.city || "").split("(")[0], 60),
+        bio: cleanText(p.bio, 400),
         avatar: cleanAvatar(p.avatar) === DEFAULT_AVATAR ? null : p.avatar,
         sports: cleanSports(p.sports),
         availability: cleanAvailability(p.availability),
@@ -1881,29 +2005,19 @@ const MatesApp = (() => {
       if (error) {
         console.warn("Enregistrement du profil impossible :", error.message);
         showToast("Impossible d'enregistrer le profil, réessaie.", "warning");
-        return;
+        return false;
       }
-      const email = state.userProfile.email;
+      const { email, phone } = state.userProfile;
       state.userProfile = profileFromRow(row, true);
       state.userProfile.email = email;
-      populateCityDropdown();
-      renderHeaderUserSection();
-      showToast("Profil enregistré ! Les autres mates voient déjà tes changements.", "success");
-      setTimeout(() => { window.location.hash = "#mate/my-profile"; }, 800);
-      return;
+      state.userProfile.phone = phone;
+    } else {
+      state.userProfile = JSON.parse(JSON.stringify(p));
+      localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(state.userProfile));
     }
-
-    // Enregistrement dans le state et LocalStorage
-    state.userProfile = JSON.parse(JSON.stringify(state.editingProfile));
-    localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(state.userProfile));
-
+    populateCityDropdown();
     renderHeaderUserSection();
-    showToast("Profil enregistré avec succès !", "success");
-
-    // Redirection vers le profil public
-    setTimeout(() => {
-      window.location.hash = "#mate/my-profile";
-    }, 800);
+    return true;
   }
 
   function viewMyPublicProfile() {
@@ -1919,7 +2033,7 @@ const MatesApp = (() => {
       state.isAuthenticated = false;
       renderHeaderUserSection();
       showToast("Tu es déconnecté. À bientôt sur le terrain !", "info");
-      window.location.hash = "#home";
+      window.location.hash = "#welcome";
       loadRemoteMates();
       return;
     }
@@ -1927,7 +2041,7 @@ const MatesApp = (() => {
     localStorage.setItem(STORAGE_KEY_AUTH, "false");
     renderHeaderUserSection();
     showToast("Vous avez été déconnecté.", "info");
-    window.location.hash = "#home";
+    window.location.hash = "#welcome";
   }
 
   /* ==========================================================================
@@ -1941,7 +2055,6 @@ const MatesApp = (() => {
   function updateAuthCard() {
     const title = document.getElementById("auth-title");
     const subtitle = document.getElementById("auth-subtitle");
-    const nameFields = document.getElementById("auth-name-fields");
     const submitBtn = document.getElementById("auth-submit-btn");
     const toggleQuestion = document.getElementById("auth-toggle-question");
     const toggleBtn = document.getElementById("auth-toggle-btn");
@@ -1949,21 +2062,21 @@ const MatesApp = (() => {
     const pwdHint = document.getElementById("auth-password-hint");
     const forgotBtn = document.getElementById("auth-forgot-btn");
     const isRegister = state.authMode === "register";
+    const phoneBtnLabel = document.querySelector('#auth-providers [onclick*="phone"] span');
+    if (phoneBtnLabel) phoneBtnLabel.textContent = isRegister ? "S'inscrire avec mon numéro" : "Continuer avec mon numéro";
     if (pwdInput) pwdInput.setAttribute("autocomplete", isRegister ? "new-password" : "current-password");
     if (pwdHint) pwdHint.classList.toggle("hidden", !isRegister);
     if (forgotBtn) forgotBtn.classList.toggle("hidden", isRegister);
 
     if (state.authMode === "register") {
       if (title) title.textContent = "Inscription sur Mates";
-      if (subtitle) subtitle.textContent = "Crée ton compte et rejoins des matchs en quelques clics.";
-      if (nameFields) nameFields.classList.remove("hidden");
+      if (subtitle) subtitle.textContent = "Crée ton compte en 10 secondes, puis personnalise ton profil.";
       if (submitBtn) submitBtn.innerHTML = `<span>Créer mon compte</span><i data-lucide="arrow-right" class="w-4 h-4"></i>`;
       if (toggleQuestion) toggleQuestion.textContent = "Déjà un compte ?";
       if (toggleBtn) toggleBtn.textContent = "Se connecter";
     } else {
       if (title) title.textContent = "Connexion à Mates";
       if (subtitle) subtitle.textContent = "Rejoins des milliers de sportifs passionnés près de chez toi.";
-      if (nameFields) nameFields.classList.add("hidden");
       if (submitBtn) submitBtn.innerHTML = `<span>Se connecter</span><i data-lucide="arrow-right" class="w-4 h-4"></i>`;
       if (toggleQuestion) toggleQuestion.textContent = "Pas encore de compte ?";
       if (toggleBtn) toggleBtn.textContent = "S'inscrire";
@@ -1971,20 +2084,127 @@ const MatesApp = (() => {
     lucide.createIcons();
   }
 
-  async function handleGoogleAuth() {
+  function showAuthPanel(panel) {
+    const isPhone = panel === "phone";
+    const toggle = (id, show) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle("hidden", !show);
+    };
+    toggle("auth-providers", !isPhone);
+    toggle("auth-email-block", !isPhone);
+    toggle("auth-phone-panel", isPhone);
+    toggle("auth-phone-form", true);
+    toggle("auth-otp-form", false);
+    if (isPhone) {
+      const input = document.getElementById("auth-phone");
+      if (input) setTimeout(() => input.focus(), 50);
+    }
+    lucide.createIcons();
+  }
+
+  async function handleOAuth(provider) {
+    const info = PROVIDERS[provider];
+    if (!info) return;
     if (SB) {
-      if (!GOOGLE_ENABLED) {
-        showToast("La connexion Google arrive bientôt. Utilise ton email en attendant !", "info");
+      if (!info.enabled) {
+        showToast(`La connexion ${info.label} arrive bientôt. Utilise ton email ou ton numéro en attendant !`, "info");
         return;
       }
-      const { error } = await SB.auth.signInWithOAuth({ provider: "google", options: { redirectTo: siteUrl() } });
+      const { error } = await SB.auth.signInWithOAuth({ provider, options: { redirectTo: siteUrl() } });
       if (error) showToast(translateAuthError(error), "warning");
+      return; // le navigateur part vers Google / Apple puis revient sur le site
+    }
+    showToast(`Connexion ${info.label} simulée (mode démo)...`, "info");
+    setTimeout(() => demoSocialLogin(provider === "google" ? "demo@gmail.com" : "demo@privaterelay.appleid.com", ""), 600);
+  }
+
+  // Numéro saisi -> format international (+32470123456)
+  function normalizePhone(country, raw) {
+    let digits = String(raw || "").replace(/[^\d+]/g, "");
+    if (digits.startsWith("00")) digits = "+" + digits.slice(2);
+    if (!digits.startsWith("+")) digits = country + digits.replace(/^0+/, "");
+    return /^\+\d{8,15}$/.test(digits) ? digits : null;
+  }
+
+  function setButtonLoading(id, isLoading) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.classList.toggle("opacity-60", isLoading);
+    btn.classList.toggle("pointer-events-none", isLoading);
+  }
+
+  async function sendPhoneCode(event) {
+    if (event) event.preventDefault();
+    const country = document.getElementById("auth-phone-country").value;
+    const phone = normalizePhone(country, document.getElementById("auth-phone").value);
+    if (!phone) {
+      showToast("Numéro invalide. Exemple : 470 12 34 56", "warning");
       return;
     }
-    showToast("Connexion Google simulée...", "info");
-    setTimeout(() => {
-      loginSuccess("Alexandre", "Deville", "alex.deville@etudiant.helmo.be");
-    }, 600);
+
+    if (SB) {
+      if (!PROVIDERS.phone.enabled) {
+        showToast("La connexion par SMS arrive bientôt. Utilise ton email en attendant !", "info");
+        return;
+      }
+      setButtonLoading("auth-phone-send-btn", true);
+      try {
+        const { error } = await SB.auth.signInWithOtp({ phone });
+        if (error) throw error;
+      } catch (err) {
+        showToast(translateAuthError(err), "warning");
+        return;
+      } finally {
+        setButtonLoading("auth-phone-send-btn", false);
+      }
+      showToast("Code envoyé par SMS !", "success");
+    } else {
+      showToast(`Mode démo : aucun SMS n'est envoyé, tape le code ${DEMO_SMS_CODE}.`, "info");
+    }
+
+    state.phoneTarget = phone;
+    document.getElementById("auth-phone-form").classList.add("hidden");
+    document.getElementById("auth-otp-form").classList.remove("hidden");
+    const hint = document.getElementById("auth-otp-hint");
+    if (hint) hint.textContent = `Code à 6 chiffres envoyé au ${phone}.`;
+    const otp = document.getElementById("auth-otp");
+    if (otp) { otp.value = ""; setTimeout(() => otp.focus(), 50); }
+  }
+
+  async function verifyPhoneCode(event) {
+    if (event) event.preventDefault();
+    const otpInput = document.getElementById("auth-otp");
+    const token = otpInput.value.replace(/\D/g, "");
+    if (token.length !== 6) {
+      showToast("Le code contient 6 chiffres.", "warning");
+      return;
+    }
+
+    if (!SB) {
+      if (token !== DEMO_SMS_CODE) {
+        showToast(`Code incorrect. En mode démo, le code est ${DEMO_SMS_CODE}.`, "warning");
+        return;
+      }
+      demoSocialLogin("", state.phoneTarget);
+      return;
+    }
+
+    setButtonLoading("auth-otp-btn", true);
+    try {
+      const { data, error } = await SB.auth.verifyOtp({ phone: state.phoneTarget, token, type: "sms" });
+      if (error) throw error;
+      otpInput.value = "";
+      await applySession(data.session);
+      await loadRemoteMates();
+      const complete = isProfileComplete(state.userProfile);
+      showToast(complete ? `Content de te revoir, ${state.userProfile.firstName} !` : "Numéro vérifié ! Personnalise ton profil.", "success");
+      goAfterLogin();
+    } catch (err) {
+      showToast(translateAuthError(err), "warning");
+    } finally {
+      setButtonLoading("auth-otp-btn", false);
+    }
   }
 
   function setAuthLoading(isLoading) {
@@ -1999,15 +2219,17 @@ const MatesApp = (() => {
     if (e) e.preventDefault();
     if (SB) return handleSupabaseAuthSubmit();
     const email = document.getElementById("auth-email").value.trim();
-    const fn = state.authMode === "register" ? (document.getElementById("auth-firstname").value.trim() || "Nouveau") : "Alexandre";
-    const ln = state.authMode === "register" ? (document.getElementById("auth-lastname").value.trim() || "Joueur") : "Deville";
-
     if (!email) {
-      showToast("Veuillez saisir votre email.", "warning");
+      showToast("Saisis ton adresse email.", "warning");
       return;
     }
-
-    loginSuccess(fn, ln, email);
+    if (state.authMode === "register") {
+      startDemoAccount({ email });
+      showToast("Compte créé ! Personnalise ton profil.", "success");
+      goAfterLogin();
+      return;
+    }
+    loginSuccess(email);
   }
 
   async function handleSupabaseAuthSubmit() {
@@ -2028,17 +2250,10 @@ const MatesApp = (() => {
     setAuthLoading(true);
     try {
       if (state.authMode === "register") {
-        const firstName = cleanText(document.getElementById("auth-firstname").value, 40);
-        const lastName = cleanText(document.getElementById("auth-lastname").value, 40);
-        if (!firstName) {
-          showToast("Indique ton prénom.", "warning");
-          return;
-        }
-
         const { data, error } = await SB.auth.signUp({
           email,
           password,
-          options: { data: { first_name: firstName, last_name: lastName }, emailRedirectTo: siteUrl() }
+          options: { emailRedirectTo: siteUrl() }
         });
         if (error) throw error;
         // Email déjà utilisé (Supabase ne renvoie pas d'erreur pour ne pas le révéler)
@@ -2057,8 +2272,8 @@ const MatesApp = (() => {
 
         await applySession(data.session);
         await loadRemoteMates();
-        showToast(`Bienvenue sur Mates, ${state.userProfile.firstName} ! Complète ton profil.`, "success");
-        window.location.hash = "#edit-profile";
+        showToast("Compte créé ! Personnalise ton profil.", "success");
+        goAfterLogin();
       } else {
         const { data, error } = await SB.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -2092,24 +2307,271 @@ const MatesApp = (() => {
     else showToast("Si un compte existe, un lien de réinitialisation vient d'être envoyé.", "success");
   }
 
-  function loginSuccess(firstName, lastName, email) {
+  function newBlankProfile(extra) {
+    const p = JSON.parse(JSON.stringify(DEFAULT_MY_PROFILE));
+    return Object.assign(p, {
+      firstName: "", lastName: "", email: "", phone: "", age: null, city: "", bio: "",
+      avatar: DEFAULT_AVATAR, sports: [], availability: {}, onboarded: false
+    }, extra || {});
+  }
+
+  // Mode démo : nouveau compte vide -> assistant de profil
+  function startDemoAccount(extra) {
+    state.userProfile = newBlankProfile(extra);
+    state.isAuthenticated = true;
+    localStorage.setItem(STORAGE_KEY_AUTH, "true");
+    localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(state.userProfile));
+    renderHeaderUserSection();
+  }
+
+  // Mode démo : Google / Apple / SMS -> on retrouve le compte déjà personnalisé, sinon nouveau compte
+  function demoSocialLogin(email, phone) {
+    const p = state.userProfile;
+    if (p && p.onboarded && isProfileComplete(p)) {
+      loginSuccess(p.email || email);
+      return;
+    }
+    startDemoAccount({ email, phone });
+    showToast("Compte créé ! Personnalise ton profil.", "success");
+    goAfterLogin();
+  }
+
+  function loginSuccess(email) {
     state.isAuthenticated = true;
     localStorage.setItem(STORAGE_KEY_AUTH, "true");
 
     if (!state.userProfile) {
       state.userProfile = JSON.parse(JSON.stringify(DEFAULT_MY_PROFILE));
     }
-    state.userProfile.firstName = firstName;
-    state.userProfile.lastName = lastName;
-    state.userProfile.email = email;
+    if (email) state.userProfile.email = email;
     localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(state.userProfile));
 
     renderHeaderUserSection();
-    showToast(`Bienvenue sur Mates, ${firstName} !`, "success");
+    showToast(`Content de te revoir${state.userProfile.firstName ? ", " + state.userProfile.firstName : ""} !`, "success");
+    setTimeout(goAfterLogin, 400);
+  }
 
-    setTimeout(() => {
-      window.location.hash = "#edit-profile";
-    }, 600);
+  /* ==========================================================================
+     8. INSCRIPTION : ASSISTANT DE PERSONNALISATION DU PROFIL (4 étapes)
+     ========================================================================== */
+  const OB_STEPS = 4;
+
+  function startOnboarding() {
+    state.editingProfile = JSON.parse(JSON.stringify(state.userProfile));
+    const p = state.editingProfile;
+    p.sports = Array.isArray(p.sports) ? p.sports : [];
+    p.availability = p.availability || {};
+    state.onboardingStep = 1;
+
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? "" : v; };
+    set("ob-firstname", p.firstName);
+    set("ob-lastname", p.lastName);
+    set("ob-age", p.age);
+    set("ob-city", p.city);
+    set("ob-bio", p.bio);
+    const avatar = document.getElementById("ob-avatar");
+    if (avatar) avatar.src = p.avatar || DEFAULT_AVATAR;
+    const list = document.getElementById("ob-city-list");
+    if (list) list.innerHTML = getCityOptions().map(c => `<option value="${escapeHtml(c)}"></option>`).join("");
+
+    renderOnboardingStep();
+  }
+
+  function readOnboardingIdentity() {
+    const p = state.editingProfile;
+    const val = id => (document.getElementById(id) || {}).value || "";
+    p.firstName = cleanText(val("ob-firstname"), 40);
+    p.lastName = cleanText(val("ob-lastname"), 40);
+    const age = parseInt(val("ob-age"), 10);
+    p.age = Number.isInteger(age) ? age : null;
+    const city = cleanText(val("ob-city"), 60);
+    p.city = findCityOption(city) || city;
+    p.bio = cleanText(val("ob-bio"), 400);
+  }
+
+  function renderOnboardingStep() {
+    const step = state.onboardingStep;
+    document.querySelectorAll("#view-onboarding .ob-step").forEach(el => {
+      el.classList.toggle("hidden", Number(el.dataset.step) !== step);
+    });
+    const num = document.getElementById("ob-step-num");
+    if (num) num.textContent = step;
+    const bar = document.getElementById("ob-progress");
+    if (bar) bar.style.width = `${(step / OB_STEPS) * 100}%`;
+    const back = document.getElementById("ob-back");
+    if (back) back.classList.toggle("invisible", step === 1);
+    const skip = document.getElementById("ob-skip");
+    if (skip) skip.classList.toggle("hidden", step < 3);
+    const next = document.getElementById("ob-next");
+    if (next) {
+      next.innerHTML = step === OB_STEPS
+        ? `<span>C'est parti !</span><i data-lucide="check" class="w-4 h-4"></i>`
+        : `<span>Continuer</span><i data-lucide="arrow-right" class="w-4 h-4"></i>`;
+    }
+
+    if (step === 2) renderObSports();
+    if (step === 3) renderObAvailability();
+    if (step === 4) renderOnboardingPreview();
+    lucide.createIcons();
+  }
+
+  function onboardingNext(skip) {
+    const p = state.editingProfile;
+    if (!p) return;
+    readOnboardingIdentity();
+
+    if (state.onboardingStep === 1) {
+      if (!p.firstName) {
+        showToast("Indique ton prénom.", "warning");
+        document.getElementById("ob-firstname").focus();
+        return;
+      }
+      if (p.age != null && (p.age < 13 || p.age > 99)) {
+        showToast("Ton âge doit être compris entre 13 et 99 ans.", "warning");
+        return;
+      }
+      if (!p.city) {
+        showToast("Indique ta ville pour trouver des mates près de chez toi.", "warning");
+        document.getElementById("ob-city").focus();
+        return;
+      }
+    }
+    if (state.onboardingStep === 2 && p.sports.length === 0) {
+      showToast("Choisis au moins un sport.", "warning");
+      return;
+    }
+    if (skip && state.onboardingStep === 4) p.bio = "";
+
+    if (state.onboardingStep >= OB_STEPS) {
+      finishOnboarding();
+      return;
+    }
+    state.onboardingStep += 1;
+    renderOnboardingStep();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function onboardingBack() {
+    if (state.onboardingStep <= 1) return;
+    readOnboardingIdentity();
+    state.onboardingStep -= 1;
+    renderOnboardingStep();
+  }
+
+  async function finishOnboarding() {
+    const p = state.editingProfile;
+    p.onboarded = true;
+    setButtonLoading("ob-next", true);
+    const ok = await persistProfile(p);
+    setButtonLoading("ob-next", false);
+    if (!ok) return;
+    if (SB) loadRemoteMates();
+    showToast(`Ton profil est prêt, ${state.userProfile.firstName} ! Voici ton espace.`, "success");
+    window.location.hash = "#dashboard";
+  }
+
+  function renderObSports() {
+    const p = state.editingProfile;
+    const grid = document.getElementById("ob-sports-grid");
+    if (grid) {
+      grid.innerHTML = INITIAL_SPORTS.map(sp => {
+        const on = p.sports.some(s => s.id === sp.id);
+        return `
+          <button type="button" onclick="MatesApp.toggleObSport('${sp.id}')" aria-pressed="${on}"
+            class="flex items-center gap-2.5 px-3 py-3 rounded-2xl border text-left transition-all ${on ? "border-mates-green bg-mates-green/10 text-white" : "border-mates-border bg-mates-cardElevated text-slate-300 hover:border-slate-500"}">
+            <span class="text-2xl">${sp.icon}</span>
+            <span class="text-sm font-bold flex-1">${sp.name}</span>
+            ${on ? `<i data-lucide="check-circle-2" class="w-4 h-4 text-mates-green"></i>` : ""}
+          </button>`;
+      }).join("");
+    }
+    const levels = document.getElementById("ob-levels");
+    if (levels) {
+      levels.innerHTML = p.sports.length === 0 ? "" : `
+        <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Ton niveau</div>
+        ${p.sports.map(s => {
+          const meta = sportMeta(s.id);
+          return `
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-mates-cardElevated border border-mates-border">
+              <div class="flex items-center gap-2 font-bold text-white text-sm"><span class="text-xl">${meta.icon || "🏅"}</span>${s.name}</div>
+              <div class="flex flex-wrap gap-1.5">
+                ${LEVELS.map(l => `<button type="button" onclick="MatesApp.setObLevel('${s.id}', '${l}')" class="px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${s.level === l ? "bg-mates-green text-mates-dark border-mates-green" : "border-mates-border text-slate-300 hover:border-slate-500"}">${l}</button>`).join("")}
+              </div>
+            </div>`;
+        }).join("")}`;
+    }
+    lucide.createIcons();
+  }
+
+  function toggleObSport(sportId) {
+    const p = state.editingProfile;
+    if (!p) return;
+    const i = p.sports.findIndex(s => s.id === sportId);
+    if (i > -1) p.sports.splice(i, 1);
+    else {
+      const meta = INITIAL_SPORTS.find(s => s.id === sportId);
+      if (!meta) return;
+      p.sports.push({ id: meta.id, name: meta.name, level: "Débutant", rating: levelToRating("Débutant") });
+    }
+    renderObSports();
+  }
+
+  function setObLevel(sportId, level) {
+    const s = state.editingProfile && state.editingProfile.sports.find(x => x.id === sportId);
+    if (!s || !LEVELS.includes(level)) return;
+    s.level = level;
+    s.rating = levelToRating(level);
+    renderObSports();
+  }
+
+  function renderObAvailability() {
+    const container = document.getElementById("ob-availability");
+    if (!container || !state.editingProfile) return;
+    container.innerHTML = buildAvailabilityMatrixHtml(state.editingProfile.availability, true);
+    lucide.createIcons();
+  }
+
+  function presetAvailability(kind) {
+    const p = state.editingProfile;
+    if (!p) return;
+    const add = (days, slots) => days.forEach(d => {
+      p.availability[d] = Array.from(new Set((p.availability[d] || []).concat(slots)));
+    });
+    if (kind === "clear") p.availability = {};
+    if (kind === "evenings") add(["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"], ["soir"]);
+    if (kind === "weekend") add(["Samedi", "Dimanche"], ["matin", "apresmidi"]);
+    renderObAvailability();
+  }
+
+  function addBioTag(text) {
+    const bio = document.getElementById("ob-bio");
+    if (!bio) return;
+    if (!bio.value.includes(text)) bio.value = (bio.value.trim() + " " + text).trim().slice(0, 400);
+    renderOnboardingPreview();
+  }
+
+  function renderOnboardingPreview() {
+    const box = document.getElementById("ob-preview");
+    if (!box || !state.editingProfile) return;
+    readOnboardingIdentity();
+    const p = state.editingProfile;
+    const slots = Object.values(p.availability || {}).reduce((n, list) => n + (list ? list.length : 0), 0);
+    box.innerHTML = `
+      <div class="bg-mates-cardElevated border border-mates-green/40 rounded-3xl p-5">
+        <div class="flex items-center gap-4 mb-3">
+          <img src="${escapeHtml(p.avatar || DEFAULT_AVATAR)}" alt="" class="w-16 h-16 rounded-full object-cover ring-2 ring-mates-green">
+          <div>
+            <div class="text-lg font-bold text-white">${escapeHtml(p.firstName || "Toi")}${p.age ? `, ${p.age} ans` : ""}</div>
+            <div class="text-xs text-slate-400 flex items-center gap-1"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-mates-green"></i>${escapeHtml(p.city || "Ta ville")}</div>
+          </div>
+        </div>
+        <p class="text-xs text-slate-300 mb-3">${p.bio ? `"${escapeHtml(p.bio)}"` : `<span class="italic text-slate-500">Nouveau sur Mates !</span>`}</p>
+        <div class="flex flex-wrap gap-1.5">
+          ${p.sports.map(s => `<span class="badge-sport"><span>${escapeHtml(s.name)}</span><span class="opacity-80 font-normal">(${s.level})</span></span>`).join("")}
+        </div>
+        <div class="text-[11px] text-slate-500 mt-3">${slots ? `${slots} créneau${slots > 1 ? "x" : ""} de dispo par semaine` : "Aucune dispo renseignée (tu pourras l'ajouter plus tard)"}</div>
+      </div>`;
+    lucide.createIcons();
   }
 
   /* ==========================================================================
@@ -2776,7 +3238,20 @@ const MatesApp = (() => {
     viewMyPublicProfile,
     logout,
     toggleAuthMode,
-    handleGoogleAuth,
+    handleOAuth,
+    handleGoogleAuth: () => handleOAuth("google"),
+    showAuthPanel,
+    sendPhoneCode,
+    verifyPhoneCode,
+    pickAvatar,
+    onAvatarFile,
+    onboardingNext,
+    onboardingBack,
+    toggleObSport,
+    setObLevel,
+    presetAvailability,
+    addBioTag,
+    renderOnboardingPreview,
     handleAuthSubmit,
     handleForgotPassword,
     locateGps,
@@ -2800,6 +3275,7 @@ const MatesApp = (() => {
     closeModals,
     setMatesWhen,
     heroSearch,
+    welcomeSearch,
     toggleLevelHelp,
     createSearchAlert,
     toggleLiveTonight,
