@@ -78,7 +78,11 @@ const MatesApp = (() => {
     googleNonce: "",
     // Chat de match
     chatMatchId: null,
-    remoteChat: {}
+    remoteChat: {},
+    // Matchs créés par les joueurs (base de données, partagés entre tous)
+    remoteMatches: [],
+    // Pré-remplissage du formulaire « Créer un match » (ex : après une réservation de terrain)
+    createMatchPrefill: null
   };
 
   /**
@@ -422,7 +426,7 @@ const MatesApp = (() => {
     const created = state.matchState.created
       .filter(m => new Date(m.startsAt).getTime() + (m.durationMin || 60) * 60000 > now - 86400000)
       .map(m => Object.assign({}, m, { players: m.players.slice(), chat: [] }));
-    return created.concat(demo).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+    return created.concat(state.remoteMatches || [], demo).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
   }
 
   function getMatch(id) {
@@ -440,10 +444,12 @@ const MatesApp = (() => {
   }
 
   function isJoined(match) {
+    if (match.remote) return match.players.some(p => p.me);
     return !!state.matchState.joined[match.id] || !!match.mine;
   }
 
   function matchPlayers(match) {
+    if (match.remote) return match.players.slice();
     const players = match.players.slice();
     if (state.matchState.joined[match.id] && state.isAuthenticated) players.push(myPlayerEntry());
     return players;
@@ -563,7 +569,7 @@ const MatesApp = (() => {
   }
 
   function updateTabbar(route) {
-    const map = { welcome: "home", home: "home", sports: "sports", sport: "sports", mate: "sports", matches: "matches", match: "matches", chat: "matches", dashboard: "dashboard", "edit-profile": "dashboard", onboarding: "dashboard", auth: "dashboard" };
+    const map = { welcome: "home", home: "home", sports: "sports", sport: "sports", mate: "sports", matches: "matches", match: "matches", chat: "matches", clubs: "sports", club: "sports", "mes-reservations": "dashboard", "mon-club": "dashboard", "devenir-club": "dashboard", admin: "dashboard", dashboard: "dashboard", "edit-profile": "dashboard", onboarding: "dashboard", auth: "dashboard" };
     const active = map[route] || "";
     document.querySelectorAll(".bottom-tabbar a").forEach(a => {
       a.classList.toggle("active", a.dataset.tab === active);
@@ -576,7 +582,102 @@ const MatesApp = (() => {
     return window.location.origin + window.location.pathname;
   }
 
+  // Sports gérés depuis l'admin (table « sports ») : remplace la liste de base
+  async function loadRemoteSports() {
+    if (!SB) return;
+    const { data, error } = await SB.from("sports").select("*").eq("active", true).order("sort", { ascending: true });
+    if (error || !data || !data.length) {
+      if (error) console.warn("Sports indisponibles :", error.message);
+      return;
+    }
+    const base = {};
+    INITIAL_SPORTS.forEach(sp => { base[sp.id] = sp; });
+    const list = data.map(r => Object.assign(
+      { slug: r.id, venuesCount: 0, activeMatesCount: 0, accentColor: "#A6E20E" },
+      base[r.id] || {},
+      {
+        id: r.id,
+        name: cleanText(r.name, 40),
+        icon: cleanText(r.icon, 8) || "🏅",
+        category: cleanText(r.category, 30),
+        playersPerMatch: cleanText(r.players_per_match, 60),
+        duration: cleanText(r.duration, 30),
+        slogan: cleanText(r.slogan, 200),
+        description: cleanText(r.description, 600),
+        popularIn: cleanText(r.popular_in, 120)
+      }
+    ));
+    INITIAL_SPORTS.splice(0, INITIAL_SPORTS.length, ...list);
+    populateSportDropdowns();
+    renderHomeSportsGrid();
+    renderSportsCatalog();
+  }
+
+  function playerFromRow(mp) {
+    const p = mp.profiles || {};
+    const myId = state.userProfile && state.userProfile.userId;
+    const me = !!myId && mp.user_id === myId;
+    const last = cleanText(p.last_name, 40);
+    return {
+      name: `${cleanText(p.first_name, 40) || "Joueur"}${last ? " " + last.charAt(0) + "." : ""}`,
+      avatar: cleanAvatar(p.avatar),
+      mateId: me ? "my-profile" : "user-" + mp.user_id,
+      userId: mp.user_id,
+      me
+    };
+  }
+
+  function matchFromRow(row) {
+    const myId = state.userProfile && state.userProfile.userId;
+    return {
+      id: row.id,
+      remote: true,
+      sportId: row.sport_id,
+      title: cleanText(row.title, 100),
+      clubId: row.club_id || null,
+      clubName: cleanText(row.club_name, 80),
+      courtName: cleanText(row.court_name, 60),
+      city: cleanText(row.city, 60),
+      startsAt: row.starts_at,
+      durationMin: row.duration_min || 90,
+      levelRequired: cleanText(row.level_required, 40) || "Tous niveaux",
+      price: Number(row.price) || 0,
+      payment: cleanText(row.payment, 80),
+      courtBooked: !!row.court_booked,
+      totalSlots: row.total_slots,
+      outdoor: !!row.outdoor,
+      amenities: (row.amenities || []).filter(a => AMENITIES[a]),
+      players: (row.match_players || [])
+        .sort((a, b) => new Date(a.joined_at) - new Date(b.joined_at))
+        .map(playerFromRow),
+      chat: [],
+      mine: !!myId && row.created_by === myId,
+      createdBy: row.created_by
+    };
+  }
+
+  async function loadRemoteMatches() {
+    if (!SB) return;
+    const since = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+    const { data, error } = await SB.from("matches")
+      .select("*, match_players(user_id, joined_at, profiles(first_name, last_name, avatar))")
+      .eq("status", "open")
+      .gte("starts_at", since)
+      .order("starts_at", { ascending: true })
+      .limit(200);
+    if (error) {
+      console.warn("Matchs indisponibles :", error.message);
+      return;
+    }
+    state.remoteMatches = (data || []).map(matchFromRow);
+    state.matches = buildMatches();
+    renderOpenMatches();
+    if (state.openMatchId) renderMatchDetail(state.openMatchId);
+    if (state.currentRoute === "dashboard") { renderDashboard(); renderDashChats(); }
+  }
+
   async function initSupabaseSession() {
+    await loadRemoteSports();
     try {
       const { data } = await SB.auth.getSession();
       if (data && data.session) {
@@ -628,7 +729,10 @@ const MatesApp = (() => {
 
     state.userProfile = profileFromRow(profileRow, true);
     state.userProfile.email = user.email || "";
+    state.userProfile.role = profileRow.role === "admin" ? "admin" : "user";
+    state.userProfile.banned = !!profileRow.banned;
     state.isAuthenticated = true;
+    if (state.userProfile.banned) showToast("Ton compte a été bloqué par un administrateur. Contacte l'équipe Mates.", "warning");
     if (profileRow.live_until) {
       state.liveUntil = new Date(profileRow.live_until).getTime() || 0;
       writeStore(STORAGE_KEY_LIVE, state.liveUntil);
@@ -653,6 +757,7 @@ const MatesApp = (() => {
       .map(row => profileFromRow(row, false));
     populateCityDropdown();
     renderMatesGrid();
+    await loadRemoteMatches();
   }
 
   function isProfileComplete(p) {
@@ -907,9 +1012,12 @@ const MatesApp = (() => {
         showView("view-dashboard");
         renderDashboard();
         renderDashChats();
+        if (window.MatesPro) window.MatesPro.renderDashboardExtras();
         break;
 
       default:
+        // Pages clubs, réservation et administration (js/pro.js)
+        if (window.MatesPro && window.MatesPro.route(mainView, param, parts)) break;
         showView("view-home");
         break;
     }
@@ -930,7 +1038,7 @@ const MatesApp = (() => {
   function updateNavLinks(activeHash) {
     document.querySelectorAll(".nav-link").forEach(link => {
       const href = link.getAttribute("href") || "";
-      if (href === `#${activeHash}` || (activeHash === "sport" && href === "#sports")) {
+      if (href === `#${activeHash}` || (activeHash === "sport" && href === "#sports") || (activeHash === "club" && href === "#clubs")) {
         link.className = "nav-link px-5 py-2 rounded-full text-sm font-bold bg-mates-green text-mates-dark shadow-md transition-all";
       } else {
         link.className = "nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300";
@@ -976,6 +1084,7 @@ const MatesApp = (() => {
         : `<a href="#auth/register" class="block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Créer mon profil</a>
            <a href="#auth/login" class="block px-4 py-2 rounded-lg font-semibold border border-mates-border text-center">Se connecter</a>`;
     }
+    if (window.MatesPro) window.MatesPro.decorateHeader();
     if (window.lucide) lucide.createIcons({ root: container });
   }
 
@@ -1521,9 +1630,11 @@ const MatesApp = (() => {
     renderMatesGrid();
     syncLiveToggles();
 
-    // Section Terrains Partenaires
+    // Section Terrains Partenaires : vrais clubs (js/pro.js), sinon exemples
     const venuesGrid = document.getElementById("sport-venues-grid");
-    if (venuesGrid) {
+    if (venuesGrid && window.MatesPro && SB) {
+      window.MatesPro.renderSportClubs(sport, venuesGrid);
+    } else if (venuesGrid) {
       venuesGrid.innerHTML = `
         <div class="bg-mates-card border border-mates-border rounded-2xl p-5 space-y-3">
           <div class="flex justify-between items-start">
@@ -2834,6 +2945,10 @@ const MatesApp = (() => {
       showToast("Ce match est complet. Active une alerte pour ne pas rater le prochain !", "warning");
       return;
     }
+    if (match.remote) {
+      joinRemoteMatch(match);
+      return;
+    }
     state.matchState.joined[match.id] = new Date().toISOString();
     addLocalChatMessage(match.id, { system: true, text: `${myPlayerEntry().name} a rejoint le match 👋` });
     saveMatchState();
@@ -2843,9 +2958,29 @@ const MatesApp = (() => {
     showToast(`C'est validé ! Ta place est réservée : ${sportMeta(match.sportId).name}, ${formatMatchDay(start).toLowerCase()} à ${formatHour(start)}. Les autres joueurs sont prévenus.`, "success");
   }
 
-  function leaveMatch(matchId) {
+  async function joinRemoteMatch(match) {
+    const { error } = await SB.from("match_players").insert({ match_id: match.id, user_id: state.userProfile.userId });
+    if (error) {
+      const m = String(error.message || "");
+      showToast(m.includes("complet") ? "Ce match vient d'être complété. Trop tard !" : m.includes("ouvert") ? "Ce match n'est plus ouvert." : "Impossible de rejoindre ce match, réessaie.", "warning");
+      return loadRemoteMatches();
+    }
+    addLocalChatMessage(match.id, { system: true, text: `${myPlayerEntry().name} a rejoint le match 👋` });
+    saveMatchState();
+    await loadRemoteMatches();
+    const start = new Date(match.startsAt);
+    showToast(`C'est validé ! Ta place est réservée : ${sportMeta(match.sportId).name}, ${formatMatchDay(start).toLowerCase()} à ${formatHour(start)}.`, "success");
+  }
+
+  async function leaveMatch(matchId) {
     const match = getMatch(matchId);
     if (!match) return;
+    if (match.remote) {
+      const { error } = await SB.from("match_players").delete().eq("match_id", match.id).eq("user_id", state.userProfile.userId);
+      if (error) return showToast("Impossible de te désinscrire, réessaie.", "warning");
+      await loadRemoteMatches();
+      return showToast("Tu t'es désinscrit. Ta place est de nouveau libre pour un autre mate.", "info");
+    }
     delete state.matchState.joined[match.id];
     saveMatchState();
     renderOpenMatches();
@@ -3252,6 +3387,7 @@ const MatesApp = (() => {
 
   function openCreateMatchModal(sportId) {
     if (!requireAuth("Connecte-toi pour organiser un match.")) return;
+    state.createMatchPrefill = null;
     populateSportDropdowns();
     populateCityDropdown();
     const form = document.getElementById("create-match-form");
@@ -3298,6 +3434,27 @@ const MatesApp = (() => {
       return;
     }
     const amenities = [...document.querySelectorAll("#cm-amenities input:checked")].map(i => i.value).filter(a => AMENITIES[a]);
+    if (SB && state.userProfile && state.userProfile.userId) {
+      const prefill = state.createMatchPrefill || {};
+      createRemoteMatch({
+        sport_id: sport.id,
+        title: `${sport.name} : ${missing} joueur${missing > 1 ? "s" : ""} recherché${missing > 1 ? "s" : ""}`,
+        club_id: prefill.clubId || null,
+        club_name: place,
+        court_name: cleanText(prefill.courtName || "", 60),
+        city,
+        starts_at: startsAt.toISOString(),
+        duration_min: Math.min(240, Math.max(30, prefill.durationMin || 90)),
+        level_required: cleanText(val("cm-level") || "Tous niveaux", 40),
+        price,
+        payment: price > 0 ? "Paiement sur place" : "Gratuit",
+        court_booked: !!(document.getElementById("cm-booked") || {}).checked,
+        total_slots: missing + 1,
+        outdoor: OUTDOOR_SPORTS.includes(sport.id),
+        amenities
+      }, missing);
+      return;
+    }
     const me = myPlayerEntry();
     const match = {
       id: "match-u-" + Date.now().toString(36),
@@ -3326,6 +3483,21 @@ const MatesApp = (() => {
     state.matchesWhen = null;
     window.location.hash = `#match/${match.id}`;
     showToast(`Ton match est publié ! Partage-le pour trouver ${missing > 1 ? `tes ${missing} joueurs` : "ton dernier joueur"} plus vite.`, "success");
+  }
+
+  async function createRemoteMatch(row, missing) {
+    const { data, error } = await SB.from("matches").insert(row).select("id").single();
+    if (error) {
+      console.warn("Création du match impossible :", error.message);
+      return showToast("Impossible de publier le match, réessaie.", "warning");
+    }
+    await SB.from("match_players").insert({ match_id: data.id, user_id: state.userProfile.userId });
+    state.createMatchPrefill = null;
+    await loadRemoteMatches();
+    closeModals();
+    state.matchesWhen = null;
+    window.location.hash = `#match/${data.id}`;
+    showToast(`Ton match est publié pour tout le monde ! Partage-le pour trouver ${missing > 1 ? `tes ${missing} joueurs` : "ton dernier joueur"} plus vite.`, "success");
   }
 
   function closeModals(silent) {
@@ -3535,7 +3707,31 @@ const MatesApp = (() => {
   }
 
   // API publique
+  // Outils internes partagés avec js/pro.js (clubs, réservations, administration)
+  const core = {
+    get SB() { return SB; },
+    get state() { return state; },
+    DEFAULT_AVATAR, LEVELS,
+    showToast, escapeHtml, cleanText, cleanAvatar, sportMeta, requireAuth, translateAuthError,
+    findCityOption, getCityOptions, formatHour, formatMatchDay, setTitle, showView,
+    loadRemoteMatches, loadRemoteSports, handleHashChange,
+    openCreateMatchModal: (sportId, prefill) => {
+      openCreateMatchModal(sportId);
+      if (!prefill) return;
+      state.createMatchPrefill = prefill;
+      const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+      set("cm-sport", sportId);
+      set("cm-city", prefill.city);
+      set("cm-place", prefill.place);
+      set("cm-date", prefill.date);
+      set("cm-time", prefill.time);
+      const booked = document.getElementById("cm-booked");
+      if (booked) booked.checked = !!prefill.booked;
+    }
+  };
+
   return {
+    core,
     init,
     resetFilters,
     filterMatesForSport,

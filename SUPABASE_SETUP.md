@@ -110,3 +110,27 @@ Relance le fichier en entier dans **SQL Editor** si tu l'avais exécuté avant c
 En **mode démo**, les messages restent dans le navigateur et un autre joueur « répond »
 automatiquement quelques secondes plus tard, pour montrer le fonctionnement.
 
+
+## 9. Clubs, réservations et administration
+
+Le fichier `schema.sql` (sections 6 à 12) ajoute :
+
+- **Rôles** : un compte peut être `admin` ; un admin peut aussi **bloquer** un compte.
+- **Clubs** : un joueur connecté clique sur « Inscrire mon club » (`#devenir-club`). Sa demande reste
+  « en attente » jusqu'à ce qu'un admin la valide. Le club gère ensuite ses terrains, horaires, tarifs
+  et son planning dans `#mon-club`.
+- **Réservations** : les joueurs réservent un créneau libre (paiement sur place). Le prix est calculé
+  par la base, et un même créneau ne peut jamais être réservé deux fois.
+- **Matchs créés par les joueurs** : enregistrés en ligne et visibles par tout le monde.
+- **Sports** : la liste des sports est modifiable depuis l'admin.
+
+### Désigner un administrateur
+
+L'adresse des administrateurs n'est **pas** dans le code (le dépôt est public). Dans **SQL Editor** :
+
+```sql
+insert into public.admin_emails (email) values ('adresse@exemple.com');
+```
+
+Le compte devient admin tout de suite s'il existe déjà, sinon dès son inscription. L'administration
+est ensuite accessible via l'icône bouclier en haut à droite, ou à l'adresse `#admin`.

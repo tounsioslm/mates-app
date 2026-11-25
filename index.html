@@ -56,7 +56,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Styles personnalisés -->
-  <link rel="stylesheet" href="css/style.css?v=11">
+  <link rel="stylesheet" href="css/style.css?v=12">
 </head>
 <body class="bg-mates-dark text-slate-100 min-h-screen flex flex-col font-sans selection:bg-mates-green selection:text-black">
 
@@ -84,6 +84,9 @@
         <a href="#matches" id="nav-matches" class="nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300">
           Matchs ouverts
         </a>
+        <a href="#clubs" id="nav-clubs" class="nav-link px-5 py-2 rounded-full text-sm font-semibold transition-all hover:text-white text-slate-300">
+          Clubs
+        </a>
         <button type="button" onclick="MatesApp.openCreateMatchModal()" class="ml-1 px-4 py-2 rounded-full text-sm font-bold text-mates-green border border-mates-green/40 hover:bg-mates-green hover:text-mates-dark transition-all flex items-center gap-1.5">
           <i data-lucide="plus" class="w-4 h-4"></i>
           <span class="hidden lg:inline">Créer un match</span>
@@ -106,6 +109,7 @@
       <a href="#home" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Accueil</a>
       <a href="#sports" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Les 14 Sports</a>
       <a href="#matches" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Matchs ouverts</a>
+      <a href="#clubs" class="mobile-nav-link block px-4 py-2 rounded-lg font-medium hover:bg-mates-cardElevated">Clubs & terrains</a>
       <a href="#" onclick="MatesApp.openCreateMatchModal(); return false;" class="mobile-nav-link block px-4 py-2 rounded-lg font-bold text-mates-green hover:bg-mates-cardElevated">+ Créer un match</a>
       <div id="mobile-auth-links" class="space-y-2 pt-3">
         <a href="#auth/register" class="mobile-nav-link block px-4 py-2 rounded-lg font-semibold bg-mates-green text-black text-center">Créer mon profil</a>
@@ -1261,6 +1265,13 @@
     <!-- ------------------------------------------------------------------
          MON ESPACE (tableau de bord du joueur connecté)
          ------------------------------------------------------------------ -->
+    <!-- ------------------------------------------------------------------
+         CLUBS, RÉSERVATIONS ET ADMINISTRATION (rempli par js/pro.js)
+         ------------------------------------------------------------------ -->
+    <section id="view-pro" class="page-view hidden fade-in py-10">
+      <div id="pro-root" class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8"></div>
+    </section>
+
     <section id="view-dashboard" class="page-view hidden fade-in py-10">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
@@ -1364,6 +1375,8 @@
             <li><a href="#home" class="hover:text-mates-green transition-colors">Accueil</a></li>
             <li><a href="#sports" class="hover:text-mates-green transition-colors">Les 14 sports</a></li>
             <li><a href="#matches" class="hover:text-mates-green transition-colors">Matchs ouverts</a></li>
+            <li><a href="#clubs" class="hover:text-mates-green transition-colors">Clubs & terrains</a></li>
+            <li><a href="#devenir-club" class="hover:text-mates-green transition-colors">Inscrire mon club</a></li>
           </ul>
         </div>
 
@@ -1545,8 +1558,9 @@
 
   <!-- Scripts Application -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="js/supabase-config.js?v=11"></script>
-  <script src="js/data.js?v=11"></script>
-  <script src="js/app.js?v=11"></script>
+  <script src="js/supabase-config.js?v=12"></script>
+  <script src="js/data.js?v=12"></script>
+  <script src="js/app.js?v=12"></script>
+  <script src="js/pro.js?v=12"></script>
 </body>
 </html>
